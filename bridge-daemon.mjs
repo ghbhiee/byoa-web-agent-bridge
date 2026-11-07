@@ -20,8 +20,46 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.BRIDGE_PORT || 19820);
 const LOCAL_PLUGINS_DIR = path.join(__dirname, 'local-plugins');
 const CHAT_SESSIONS_FILE = path.join(__dirname, 'chat-sessions.json');
+const TOKEN_FILE = path.join(__dirname, '.bridge-token');
 
 fs.mkdirSync(LOCAL_PLUGINS_DIR, { recursive: true });
+
+function loadOrCreateBridgeToken() {
+  if (process.env.BRIDGE_TOKEN && process.env.BRIDGE_TOKEN.trim().length >= 16) {
+    const envToken = process.env.BRIDGE_TOKEN.trim();
+    try { fs.writeFileSync(TOKEN_FILE, envToken + '\n', { mode: 0o600 }); } catch (_) {}
+    return envToken;
+  }
+  if (fs.existsSync(TOKEN_FILE)) {
+    const saved = fs.readFileSync(TOKEN_FILE, 'utf8').trim();
+    if (saved.length >= 16) return saved;
+  }
+  const generated = 'bt_' + crypto.randomBytes(24).toString('hex');
+  fs.writeFileSync(TOKEN_FILE, generated + '\n', { mode: 0o600 });
+  return generated;
+}
+
+const BRIDGE_TOKEN = loadOrCreateBridgeToken();
+
+function verifyTokenString(candidate) {
+  if (!candidate || typeof candidate !== 'string') return false;
+  const a = Buffer.from(candidate.trim());
+  const b = Buffer.from(BRIDGE_TOKEN);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+function isRequestAuthorized(req, parsedUrl) {
+  const headerToken = req.headers['x-bridge-token'];
+  if (headerToken && verifyTokenString(String(headerToken))) return true;
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    if (verifyTokenString(authHeader.slice(7))) return true;
+  }
+  const queryToken = parsedUrl?.searchParams?.get('token');
+  if (queryToken && verifyTokenString(queryToken)) return true;
+  return false;
+}
 
 const BUNDLED_CODEX = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex';
 const CODEX_BIN = fs.existsSync(BUNDLED_CODEX) ? BUNDLED_CODEX : 'codex';
@@ -460,7 +498,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Bridge-Token');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -468,15 +506,27 @@ const server = http.createServer(async (req, res) => {
   }
 
   const parsedUrl = new URL(req.url, 'http://127.0.0.1');
+  const authed = isRequestAuthorized(req, parsedUrl);
 
   if (req.method === 'GET' && parsedUrl.pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     return res.end(JSON.stringify({
       ok: true,
+      authRequired: true,
+      authenticated: authed,
       mode: 'local-first-plugin-injection',
-      localPluginsDir: LOCAL_PLUGINS_DIR,
-      pluginCount: listLocalPlugins().length,
+      pluginCount: authed ? listLocalPlugins().length : undefined,
       connectedBrowsers: activeClients.size
+    }));
+  }
+
+  // Enforce Token Authentication on all functional HTTP routes
+  if (!authed) {
+    res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({
+      ok: false,
+      error: 'UNAUTHORIZED_BRIDGE_TOKEN',
+      message: '未授权访问本地 Bridge：请通过 URL #bridge_token=<TOKEN> 传入配对密钥，或在请求头携带 X-Bridge-Token。'
     }));
   }
 
@@ -619,6 +669,9 @@ server.on('upgrade', (req, socket) => {
   const key = req.headers['sec-websocket-key'];
   if (!key) return socket.destroy();
 
+  const upgradeUrl = new URL(req.url, 'http://127.0.0.1');
+  const authed = isRequestAuthorized(req, upgradeUrl);
+
   const acceptKey = crypto
     .createHash('sha1')
     .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
@@ -632,6 +685,20 @@ server.on('upgrade', (req, socket) => {
     'Access-Control-Allow-Private-Network: true',
     '\r\n'
   ].join('\r\n'));
+
+  if (!authed) {
+    const tempClient = attachWebSocket(socket, () => {}, () => {});
+    tempClient.send({
+      jsonrpc: '2.0',
+      method: 'bridge.auth_error',
+      params: {
+        error: 'UNAUTHORIZED_BRIDGE_TOKEN',
+        message: '本地 Bridge 需要 Token 鉴权，请使用带 #bridge_token=<TOKEN> 的链接打开页面，或点击页面顶部「Token 配对」填入本地密钥。'
+      }
+    });
+    setTimeout(() => socket.destroy(), 150);
+    return;
+  }
 
   const client = attachWebSocket(
     socket,
@@ -677,6 +744,8 @@ server.on('upgrade', (req, socket) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`🚀 Local Codex Bridge Daemon (Local-First Injection + CORS Proxy) on ws://127.0.0.1:${PORT}`);
-  console.log(`📁 Local Plugins Store: ${LOCAL_PLUGINS_DIR}`);
+  console.log(`🚀 Local Codex Bridge Daemon (Local-First Injection + CORS Proxy + Token Auth) on ws://127.0.0.1:${PORT}`);
+  console.log(`📁 Local Plugins Store : ${LOCAL_PLUGINS_DIR}`);
+  console.log(`🔑 Bridge Auth Token   : ${BRIDGE_TOKEN} (stored in ${TOKEN_FILE}, mode 0600)`);
+  console.log(`🔗 URL Fragment Suffix : #home&bridge_token=${BRIDGE_TOKEN}`);
 });

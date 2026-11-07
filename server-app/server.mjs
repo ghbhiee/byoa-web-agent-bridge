@@ -49,28 +49,28 @@ function seedDefaultPagesIfEmpty() {
     slug: 'home',
     title: 'AI 动态控制台主页',
     icon: '🏠',
-    description: '支持通过本地 Agent 终端或右侧在线对话实时修改页面结构、样式与交互逻辑，所有插件默认驻留本机并支持多租户云端静态同步。',
+    description: '支持通过本地 Codex 终端或右侧在线对话实时修改页面结构、样式与交互逻辑，所有更改自动持久化在 15 服务器。',
     updatedAt: now,
     updatedBy: 'system-seed',
     revisions: [],
     html: `
 <div class="hero-card">
-  <div class="hero-badge">⚡ BYOA Web Studio · Live Canvas</div>
-  <h1 class="hero-title">欢迎来到本地主权 Agent 驱动的动态演进工作台</h1>
+  <div class="hero-badge">⚡ Codex Web Studio · Live Canvas</div>
+  <h1 class="hero-title">欢迎来到本地 Codex 驱动的动态演进工作台</h1>
   <p class="hero-desc">
-    当前页面托管在云端宿主服务器上，并与你本机的 <code>Local Agent Bridge (127.0.0.1:19820)</code> 建立了双向桥接。
-    你可以在<strong>右侧对话栏</strong>直接下达修改/新建页面的指令，也可以在本地终端进入 <code>~/.byoa-web-bridge</code> 目录运行你的本地 Agent 直接操控本页面！
+    当前页面托管在 <strong>your-web-app.example.com</strong> 服务器上，并与你本机的 <code>Codex Headless Harness</code> 建立了双向桥接。
+    你可以在<strong>右侧对话栏</strong>直接下达修改/新建页面的指令，也可以在本地终端进入 <code>~/.byoa-web-bridge</code> 目录运行 <code>codex</code> 直接操控本页面！
   </p>
   <div class="stat-grid" id="home-stats">
     <div class="stat-box">
       <span class="stat-label">双向通信引擎</span>
-      <span class="stat-value">Local Agent + MCP</span>
+      <span class="stat-value">Codex CLI + MCP</span>
       <span class="stat-sub">支持无头 JSONL 流式输出与多轮会话</span>
     </div>
     <div class="stat-box">
-      <span class="stat-label">插件驻留模式</span>
-      <span class="stat-value">Local-First 注入</span>
-      <span class="stat-sub">~/.byoa-web-bridge/local-plugins/*.json</span>
+      <span class="stat-label">页面持久化位置</span>
+      <span class="stat-value">your-web-app.example.com</span>
+      <span class="stat-sub">/var/lib/codex-studio/pages/*.json</span>
     </div>
     <div class="stat-box">
       <span class="stat-label">当前服务器时间</span>
@@ -456,6 +456,27 @@ function renderStandalonePageHTML(slug, fallbackPage = null) {
       let currentCleanup = null;
       let activePageObj = null;
 
+      // Extract #bridge_token=<TOKEN> from URL Fragment (#) if present and scrub address bar
+      (function extractHashToken() {
+        const rawHash = location.hash.replace(/^#/, '');
+        if (!rawHash) return;
+        for (const part of rawHash.split('&')) {
+          if (part.startsWith('bridge_token=')) {
+            const tk = decodeURIComponent(part.slice('bridge_token='.length).trim());
+            if (tk) localStorage.setItem('codex_bridge_token', tk);
+            history.replaceState(null, '', location.pathname + location.search);
+          }
+        }
+      })();
+
+      function getBridgeToken() {
+        return (localStorage.getItem('codex_bridge_token') || '').trim();
+      }
+      function bridgeHeaders(extra = {}) {
+        const tk = getBridgeToken();
+        return tk ? { ...extra, 'X-Bridge-Token': tk } : { ...extra };
+      }
+
       window.agentBridge = {
         sendChatPrompt: (prompt) => {
           window.location.href = '/codex-studio/#' + encodeURIComponent(targetSlug) + '?ask=' + encodeURIComponent(prompt);
@@ -485,7 +506,7 @@ function renderStandalonePageHTML(slug, fallbackPage = null) {
         fetchProxy: async (url, options = {}) => {
           const res = await window.fetch(LOCAL_BRIDGE_HTTP + '/proxy', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: bridgeHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
               url,
               method: options.method || 'GET',
@@ -566,7 +587,7 @@ function renderStandalonePageHTML(slug, fallbackPage = null) {
       async function resolveAndMount() {
         // 1. Try Local Bridge (http://127.0.0.1:19820/local-plugins) first!
         try {
-          const r = await window.fetch(LOCAL_BRIDGE_HTTP + '/local-plugins');
+          const r = await window.fetch(LOCAL_BRIDGE_HTTP + '/local-plugins', { headers: bridgeHeaders() });
           if (r.ok) {
             const d = await r.json();
             const list = d.plugins || [];
@@ -614,7 +635,9 @@ function renderStandalonePageHTML(slug, fallbackPage = null) {
 
       // Connect to Local Bridge WebSocket so standalone page also hot-reloads in real time!
       try {
-        const ws = new WebSocket(LOCAL_BRIDGE_WS);
+        const tk = getBridgeToken();
+        const wsUrl = tk ? LOCAL_BRIDGE_WS + '?token=' + encodeURIComponent(tk) : LOCAL_BRIDGE_WS;
+        const ws = new WebSocket(wsUrl);
         ws.onmessage = (ev) => {
           try {
             const msg = JSON.parse(ev.data);
@@ -748,9 +771,11 @@ else
 fi
 
 echo "🎉 Installation complete!"
+BRIDGE_TOKEN=\$(cat "\$INSTALL_DIR/.bridge-token" 2>/dev/null | tr -d '\\n' || true)
 echo "📁 Workspace Directory : \$INSTALL_DIR"
-echo "🔌 Local Bridge Health : \$(curl -fsS http://127.0.0.1:19820/health || echo 'Starting...')"
-echo "💡 Run your local agent inside \$INSTALL_DIR (or register \$INSTALL_DIR/mcp-server.mjs in your Agent MCP config)."
+echo "🔑 Bridge Auth Token   : \$BRIDGE_TOKEN"
+echo "🔗 One-Click Pairing   : \$SITE_URL/#home&bridge_token=\$BRIDGE_TOKEN"
+echo "💡 Open the One-Click Pairing URL above in your browser to pair via URL Fragment (#bridge_token)!"
 `;
       res.writeHead(200, { 'Content-Type': 'text/x-shellscript; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(script);
@@ -781,23 +806,16 @@ curl -fsSL ${publicBaseUrl}/install.sh | bash
 
 ---
 
-## 第二步：安装包内含的核心组件说明
+## 第二步：安装包内含的核心组件与 Token 安全机制说明
 
 解压后的 \`~/.byoa-web-bridge\` 目录包含以下零外部依赖（基于 Node.js >= 18 原生模块）组件：
 
-1. **\`bridge-daemon.mjs\`（本地桥接守护进程，监听 \`127.0.0.1:19820\`）**：
-   - 负责管理本机 \`./local-plugins/*.json\` 插件文件并监听变更，通过 WebSocket (\`ws://127.0.0.1:19820\`) 毫秒级推送给浏览器进行客户端动态注入。
-   - 提供 \`POST http://127.0.0.1:19820/proxy\` 本地跨域代理通道，解决前端插件请求外部第三方 API（如实时股票行情、跨平台金融/政务接口）的 CORS 限制与自定义 \`Referer\` / \`GB18030\` 解码需求。
-   - 支持网页端对话直接唤醒本机无头 Agent (\`codex exec --json\`)，支持单任务互斥锁与 \`POST /codex/stop\` 实时中断。
+1. **\`bridge-daemon.mjs\`（本地桥接守护进程，监听 \`127.0.0.1:19820\`，强制 256-bit Token 鉴权）**：
+   - 启动时自动生成 256-bit 随机密钥并保存在 \`~/.byoa-web-bridge/.bridge-token\`（权限 \`0600\`，仅当前系统用户可读）。
+   - 所有 WebSocket 连接（\`ws://127.0.0.1:19820?token=<TOKEN>\`）与 HTTP 接口（\`X-Bridge-Token: <TOKEN>\`）均通过 \`crypto.timingSafeEqual\` 校验 Token，防止本机其他未授权进程或恶意网页跨站调用。
+   - **URL Fragment (\`#bridge_token=<TOKEN>\`) 零泄露配对**：用户点击 \`${publicBaseUrl}/#home&bridge_token=<TOKEN>\` 打开网页时，浏览器前端从 \`location.hash\` 提取 Token 存入 \`localStorage\`，并立即通过 \`history.replaceState\` 从地址栏擦除。由于 \`#\` 片段绝不随 HTTP 请求发送到服务器，服务端永远无法获知用户的本地 Bridge Token。
 2. **\`mcp-server.mjs\`（标准 stdio MCP Server，服务名 \`page_studio\`）**：
-   - 向本地 Agent 暴露 7 个核心工具：
-     - \`list_remote_pages\`：列出本机已安装的页面与插件
-     - \`get_remote_page\`：读取指定页面或插件的 \`html\` / \`css\` / \`js\` 源码
-     - \`create_remote_page\`：创建新本地页面（\`custom-page\`）或宿主页面挂件补丁（\`page-patch\`）
-     - \`update_remote_page\`：修改本地插件并实时热重载到浏览器
-     - \`delete_remote_page\`：删除本地插件
-     - \`inspect_live_browser\`：实时读取用户当前打开网页的真实 DOM 树与宿主状态
-     - \`eval_in_live_browser\`：在当前打开的网页沙箱中直接执行调试脚本
+   - 自动读取同目录下的 \`.bridge-token\` 并随请求附带 \`X-Bridge-Token\` 头，向本地 Agent 暴露 7 个核心工具（\`list_remote_pages\`、\`get_remote_page\`、\`create_remote_page\`、\`update_remote_page\`、\`delete_remote_page\`、\`inspect_live_browser\`、\`eval_in_live_browser\`）。
 3. **\`AGENTS.md\`（Agent 注入规范与跨域调用手册）**：
    - 详细定义了插件 \`js\` 中如何使用 \`bridge.fetchProxy(url, options)\`、\`bridge.getPageData()\`、\`bridge.callBackendApi(path)\`。
 
@@ -819,32 +837,18 @@ env = { CODEX_STUDIO_LOCAL_BRIDGE = "http://127.0.0.1:19820", CODEX_STUDIO_REMOT
 claude mcp add page_studio -- node ~/.byoa-web-bridge/mcp-server.mjs
 \`\`\`
 
-### 若你使用的是 Cursor / Windsurf / 其他支持 MCP JSON 的 Agent：
-\`\`\`json
-{
-  "mcpServers": {
-    "page_studio": {
-      "command": "node",
-      "args": ["~/.byoa-web-bridge/mcp-server.mjs"],
-      "env": {
-        "CODEX_STUDIO_LOCAL_BRIDGE": "http://127.0.0.1:19820",
-        "CODEX_STUDIO_REMOTE_API": "${publicBaseUrl}/api"
-      }
-    }
-  }
-}
-\`\`\`
-
 ---
 
-## 第四步：启动本地 Bridge 守护进程并验证连接
+## 第四步：启动本地 Bridge 守护进程并向用户输出 \`#bridge_token\` 配对链接
 
-在后台启动 \`bridge-daemon.mjs\`：
+在后台启动 \`bridge-daemon.mjs\` 并读取生成的 Token：
 \`\`\`bash
 nohup node ~/.byoa-web-bridge/bridge-daemon.mjs > ~/.byoa-web-bridge/bridge.log 2>&1 &
-curl -s http://127.0.0.1:19820/health
+sleep 1
+TOKEN=\$(cat ~/.byoa-web-bridge/.bridge-token | tr -d '\\n')
+echo "Pairing URL: ${publicBaseUrl}/#home&bridge_token=\$TOKEN"
 \`\`\`
-当返回 \`{"ok":true,"mode":"local-first-plugin-injection",...}\` 时，用户在浏览器打开 \`${publicBaseUrl}/\` 即可看到顶部状态变为 **「🟢 本地 Bridge 已连接」**！
+请务必将上述生成的 **\`${publicBaseUrl}/#home&bridge_token=<TOKEN>\` 配对链接** 展示给用户，用户点击该链接即可自动完成浏览器与本地 Bridge 的安全鉴权配对！
 `;
       res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(guide);

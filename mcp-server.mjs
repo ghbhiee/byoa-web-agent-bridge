@@ -8,22 +8,40 @@
  */
 
 import readline from 'node:readline';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOCAL_PLUGINS_DIR = path.join(__dirname, 'local-plugins');
+const TOKEN_FILE = path.join(__dirname, '.bridge-token');
 const LOCAL_BRIDGE_API = process.env.CODEX_STUDIO_LOCAL_BRIDGE || 'http://127.0.0.1:19820';
 const REMOTE_API_BASE = process.env.CODEX_STUDIO_REMOTE_API || 'http://localhost:3045/api';
 const PROTOCOL_VERSION = '2024-11-05';
+
+function getLocalBridgeToken() {
+  if (process.env.BRIDGE_TOKEN) return process.env.BRIDGE_TOKEN.trim();
+  try {
+    if (fs.existsSync(TOKEN_FILE)) {
+      return fs.readFileSync(TOKEN_FILE, 'utf8').trim();
+    }
+  } catch (_) {}
+  return '';
+}
 
 async function httpJson(url, method = 'GET', body = undefined, timeoutMs = 20000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const headers = {};
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const token = getLocalBridgeToken();
+    if (token && url.startsWith(LOCAL_BRIDGE_API)) {
+      headers['X-Bridge-Token'] = token;
+    }
     const res = await fetch(url, {
       method,
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: controller.signal
     });

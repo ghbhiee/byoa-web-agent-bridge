@@ -129,10 +129,13 @@
 
 4. 在后台启动本地桥接守护进程：
    nohup node ~/.byoa-web-bridge/bridge-daemon.mjs > ~/.byoa-web-bridge/bridge.log 2>&1 &
-   并请求 http://127.0.0.1:19820/health 确认本地桥接服务已启动成功。
+   启动后读取 ~/.byoa-web-bridge/.bridge-token 中的 256-bit 密钥，并向我输出带有 #bridge_token=<TOKEN> 的专属安全配对链接（格式：https://your-web-app.example.com/#home&bridge_token=<TOKEN>），以便我点击即可完成浏览器与本机 Bridge 的零泄露鉴权配对！
 ```
 
-### 🔧 本地 Agent 执行上述 Prompt 后的自动化流程
+### 🔧 本地 Agent 执行上述 Prompt 后的自动化流程与 `#bridge_token` 零泄露安全机制
 1. **拉取规范与代码包**：本地 Agent 自动执行 `curl` 拉取 `agent-setup-guide.md` 与 `bridge-bundle.tar.gz`，解压出 `bridge-daemon.mjs`（本地 WebSocket 桥接与 CORS 代理服务）、`mcp-server.mjs`（标准 stdio MCP 工具集）以及 `AGENTS.md`（页面注入与 `bridge.fetchProxy` 编码规范）。
 2. **自动挂载 MCP 工具**：本地 Agent 将 `page_studio` 注册进自身的 MCP 配置文件中，立即获得 `list_remote_pages`、`get_remote_page`、`create_remote_page`、`update_remote_page`、`inspect_live_browser`、`eval_in_live_browser` 等操作网页的能力。
-3. **启动本地守护进程并与浏览器握手**：启动 `127.0.0.1:19820` 服务后，用户当前打开的网页自动通过 WebSocket 完成本地握手，状态灯变绿（`🟢 本地 Bridge 已连接`），立刻实现**“网页内对话驱动本地 Agent + 本地终端实时注入网页 + 本地跨域代理打通多平台数据”**的完整闭环。
+3. **生成 `0600` 本地密钥并通过 URL Fragment (`#bridge_token`) 零泄露配对**：
+   - `bridge-daemon.mjs` 启动时自动生成 256-bit 随机 Token 存入 `~/.byoa-web-bridge/.bridge-token`（权限 `0600`），所有 HTTP（`X-Bridge-Token`）与 WebSocket（`?token=`）请求均通过 `crypto.timingSafeEqual` 严格校验，防止本机其他未授权进程或恶意网页跨站调用；
+   - 用户点击 Agent 输出的 `https://your-web-app.example.com/#home&bridge_token=<TOKEN>` 链接时，根据 **RFC 3986** 规范，`#` 号后的 Fragment 仅在浏览器本地内存解析，**绝不会随 HTTP 请求发送到远端服务器**；
+   - 前端提取 `bridge_token` 存入 `localStorage` 后，立即调用 `history.replaceState` 将 Token 从地址栏抹除，顶部状态变为 **「Bridge 已连接」**，彻底实现安全、无感的双向桥接闭环。

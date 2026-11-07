@@ -330,7 +330,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      gap: 14px;
       flex-shrink: 0;
     }
     .stage-info {
@@ -338,8 +338,17 @@
       align-items: center;
       gap: 10px;
       font-size: 13px;
+      flex: 1;
       min-width: 0;
       overflow: hidden;
+      white-space: nowrap;
+    }
+    #cur-page-title {
+      white-space: nowrap;
+      flex-shrink: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
     }
     .slug-badge {
       font-family: var(--font-mono);
@@ -348,18 +357,21 @@
       background: rgba(56, 189, 248, 0.1);
       padding: 2px 8px;
       border-radius: 5px;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     .stage-actions {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-shrink: 0;
+      white-space: nowrap;
     }
     .tool-btn {
       background: #1e293b;
       color: #e2e8f0;
       border: 1px solid var(--border-light);
-      padding: 5px 11px;
+      padding: 5px 12px;
       border-radius: 7px;
       font-size: 12px;
       font-weight: 600;
@@ -367,9 +379,12 @@
       text-decoration: none;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      justify-content: center;
+      gap: 4px;
       transition: all 0.15s;
       white-space: nowrap;
+      flex-shrink: 0;
+      line-height: 1.3;
     }
     .tool-btn:hover { border-color: var(--accent); color: var(--accent); }
     .tool-btn.danger:hover { border-color: var(--rose); color: var(--rose); }
@@ -876,31 +891,31 @@
 
   <!-- Top Bar -->
   <header class="top-nav">
-    <div class="brand">
-      <span>⚡ Codex Web Studio</span>
-      <span class="brand-badge">Local-First 插件注入 ⇄ 多租户同步</span>
+    <div class="brand" style="white-space:nowrap;flex-shrink:0;">
+      <span>Codex Web Studio</span>
+      <span class="brand-badge">Local-First Bridge</span>
     </div>
-    <div class="status-bar">
-      <div class="conn-pill" style="gap:8px;">
-        <span>👤 租户:</span>
+    <div class="status-bar" style="flex-wrap:nowrap;white-space:nowrap;">
+      <div class="conn-pill" style="gap:6px;">
+        <span>租户</span>
         <select id="user-select" style="background:#0f172a;color:#38bdf8;border:1px solid #334155;border-radius:5px;padding:2px 6px;font-size:11px;font-weight:700;">
-          <option value="default">default (默认主账号)</option>
-          <option value="alice">alice (测试租户 A)</option>
-          <option value="bob">bob (测试租户 B)</option>
+          <option value="default">default</option>
+          <option value="alice">alice</option>
+          <option value="bob">bob</option>
         </select>
-        <button class="btn-icon" id="btn-sync-push" title="将本机插件同步备份至云端个人账号目录">☁️ 同步到云端</button>
-        <button class="btn-icon" id="btn-sync-pull" title="从云端拉取当前账号的插件">📥 云端拉取</button>
+        <button class="btn-icon" id="btn-sync-push" title="将本机插件同步备份至云端个人账号目录">同步云端</button>
+        <button class="btn-icon" id="btn-sync-pull" title="从云端拉取当前账号的插件">云端拉取</button>
       </div>
       <div class="conn-pill">
         <span class="dot online" id="sse-dot"></span>
         <span id="sse-status">云端已连接</span>
       </div>
-      <div class="conn-pill" id="bridge-conn-pill" style="cursor:pointer;" title="点击查看如何将你的本地 Agent (Bridge/MCP) 接入此网站">
+      <div class="conn-pill" id="bridge-conn-pill" style="cursor:pointer;" title="点击配置本地 Bridge Token 或查看 Agent 接入指南">
         <span class="dot" id="bridge-dot"></span>
-        <span id="bridge-status">连接本地 Bridge (127.0.0.1:19820)...</span>
+        <span id="bridge-status">连接本地 Bridge...</span>
       </div>
-      <button class="btn-icon" id="btn-agent-setup" style="border-color:rgba(16,185,129,0.5);color:#34d399;background:rgba(16,185,129,0.12);" title="获取给本地 Agent 自动安装本网站 MCP 与 Bridge 服务的 Prompt 及安装包">📦 接入本地 Agent (安装 MCP/Bridge)</button>
-      <button class="btn-icon active-toggle" id="btn-toggle-chat" title="打开或关闭右侧 AI 对话面板">💬 AI 对话栏</button>
+      <button class="btn-icon" id="btn-agent-setup" style="border-color:rgba(16,185,129,0.5);color:#34d399;background:rgba(16,185,129,0.12);" title="配对本地 Bridge Token 或获取给本地 Agent 安装 MCP/Bridge 的 Prompt">接入本地 Agent</button>
+      <button class="btn-icon active-toggle" id="btn-toggle-chat" title="打开或关闭右侧 AI 对话面板">AI 对话</button>
     </div>
   </header>
 
@@ -912,15 +927,15 @@
       <div class="sidebar-header">
         <div class="sidebar-header-left">
           <button class="btn-icon" id="btn-toggle-sidebar" title="折叠/展开左侧导航为大图标模式">◀</button>
-          <span class="sidebar-title-text">🔌 页面与本地插件</span>
+          <span class="sidebar-title-text">页面与本地插件</span>
         </div>
         <div class="sidebar-header-actions">
-          <button class="btn-icon" id="btn-create-blank" title="新建本地插件页面">➕ <span class="btn-new-text">新建</span></button>
+          <button class="btn-icon" id="btn-create-blank" title="新建本地插件页面">+ <span class="btn-new-text">新建</span></button>
         </div>
       </div>
       <div class="page-list" id="page-list"></div>
       <div class="sidebar-footer">
-        📁 本地插件目录：<br>
+        本地插件目录：<br>
         <code>./local-plugins/*.json</code><br>
         支持本地 Codex 实时注入与跨域代理。
       </div>
@@ -930,16 +945,16 @@
     <main class="stage">
       <div class="stage-toolbar">
         <div class="stage-info">
-          <span id="cur-page-icon" style="font-size:18px;">🏠</span>
+          <span id="cur-page-icon" style="display:none;">🏠</span>
           <strong id="cur-page-title">加载中...</strong>
           <span class="slug-badge" id="cur-page-slug">/home</span>
-          <span style="font-size:11px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="cur-page-meta"></span>
+          <span style="font-size:11.5px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="cur-page-meta"></span>
         </div>
         <div class="stage-actions">
-          <button class="tool-btn primary" id="btn-edit-source">📝 源码与实时预览 (IDE)</button>
-          <button class="tool-btn" id="btn-rollback">⏪ 回滚上一版 (<span id="rev-count">0</span>)</button>
-          <a class="tool-btn" id="btn-standalone" href="/codex-studio/p/home" target="_blank" title="在新标签页中独立运行此页面或本地插件">🔗 独立链接打开</a>
-          <button class="tool-btn danger" id="btn-delete-page">🗑️ 删除</button>
+          <button class="tool-btn primary" id="btn-edit-source">源码编辑</button>
+          <button class="tool-btn" id="btn-rollback">回滚 (<span id="rev-count">0</span>)</button>
+          <a class="tool-btn" id="btn-standalone" href="/codex-studio/p/home" target="_blank" title="在新标签页中独立运行此页面或本地插件">独立打开</a>
+          <button class="tool-btn danger" id="btn-delete-page">删除</button>
         </div>
       </div>
 
@@ -1060,6 +1075,18 @@
         <button class="tool-btn" id="btn-close-setup-modal">✕ 关闭</button>
       </div>
       <div style="padding:22px 24px;display:flex;flex-direction:column;gap:18px;line-height:1.65;font-size:13px;color:var(--text-main);">
+        <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.35);border-radius:10px;padding:14px 16px;">
+          <div style="font-weight:700;color:#34d399;margin-bottom:6px;">本地 Bridge Token 安全鉴权（支持 URL #bridge_token 零泄露配对）</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-bottom:10px;">
+            为防止本机其他未授权网页或进程访问 <code>127.0.0.1:19820</code>，本地 Bridge 强制校验 256-bit Token。你可以通过带有 <code>#bridge_token=bt_xxx</code> 的链接打开本页面自动完成配对（<code>#</code> Hash 片段仅在浏览器本地解析，绝不经过网络发送给服务器，且解析后自动从地址栏擦除），也可以在下方直接粘贴本机 <code>.bridge-token</code>：
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="input-bridge-token" class="ide-input" style="flex:1;font-family:var(--font-mono);font-size:12px;" placeholder="粘贴本机 .bridge-token (例如 bt_xxxxxx...)">
+            <button class="tool-btn primary" id="btn-save-bridge-token">保存 Token 并重连</button>
+            <button class="tool-btn" id="btn-copy-pairing-url">复制 #bridge_token 配对链接</button>
+          </div>
+        </div>
+
         <div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:10px;padding:14px 16px;">
           <div style="font-weight:700;color:var(--accent);margin-bottom:4px;">💡 为什么使用你自己的本地 Agent (Bring Your Own Agent)？</div>
           <div style="color:var(--text-muted);font-size:12.5px;">
@@ -1108,14 +1135,53 @@
     let currentUserId = localStorage.getItem('codex_studio_user_id') || 'default';
     document.getElementById('user-select').value = currentUserId;
 
+    // Extract #bridge_token=<TOKEN> from URL Fragment (#) and immediately scrub URL bar!
+    function parseHashAndBridgeToken() {
+      const rawHash = location.hash.replace(/^#/, '');
+      if (!rawHash) return 'home';
+      const parts = rawHash.split('&');
+      let slugPart = 'home';
+      let foundToken = null;
+      for (const part of parts) {
+        if (part.startsWith('bridge_token=')) {
+          foundToken = decodeURIComponent(part.slice('bridge_token='.length).trim());
+        } else if (part.startsWith('token=')) {
+          foundToken = decodeURIComponent(part.slice('token='.length).trim());
+        } else if (part && !part.includes('=')) {
+          slugPart = part.split('?')[0];
+        } else if (part.startsWith('page=')) {
+          slugPart = decodeURIComponent(part.slice(5));
+        }
+      }
+      if (foundToken) {
+        localStorage.setItem('codex_bridge_token', foundToken);
+        const cleanHash = slugPart ? `#${slugPart}` : '';
+        history.replaceState(null, '', location.pathname + location.search + cleanHash);
+      }
+      return slugPart || 'home';
+    }
+
+    function getBridgeToken() {
+      return (localStorage.getItem('codex_bridge_token') || '').trim();
+    }
+
+    function bridgeFetch(urlOrPath, options = {}) {
+      const fullUrl = urlOrPath.startsWith('http') ? urlOrPath : `${LOCAL_BRIDGE_HTTP}${urlOrPath}`;
+      const token = getBridgeToken();
+      const headers = { ...(options.headers || {}) };
+      if (token) headers['X-Bridge-Token'] = token;
+      return window.fetch(fullUrl, { ...options, headers });
+    }
+
     let pagesList = [];
     let localPluginsMap = new Map();
     let hostBackendData = null;
-    let currentSlug = (location.hash.slice(1).split('?')[0]) || 'home';
+    let currentSlug = parseHashAndBridgeToken();
     let currentPageData = null;
     let currentCleanupFn = null;
     let previewCleanupFn = null;
     let bridgeWs = null;
+    let bridgeAuthFailed = false;
 
     // Chat & Session State
     let chatSessions = [];
@@ -1272,10 +1338,11 @@
       document.getElementById('cur-page-title').textContent = page.title || page.slug;
       document.getElementById('cur-page-slug').textContent = `/${page.slug}`;
       const timeStr = page.updatedAt ? new Date(page.updatedAt).toLocaleString('zh-CN', { hour12: false }) : '';
-      const modeLabel = localPluginsMap.has(page.slug) ? '🔌 本地 Bridge 实时注入 (代码驻留本机)' : '🌐 公共宿主页面';
-      document.getElementById('cur-page-meta').textContent = `${modeLabel} · ${timeStr}`;
+      const modeLabel = localPluginsMap.has(page.slug) ? '本地注入' : '公共页面';
+      document.getElementById('cur-page-meta').textContent = timeStr ? `${modeLabel} · ${timeStr}` : modeLabel;
       document.getElementById('rev-count').textContent = Array.isArray(page.revisions) ? page.revisions.length : 0;
-      document.getElementById('btn-standalone').href = `${STANDALONE_PREFIX}${encodeURIComponent(page.slug)}`;
+      const tk = getBridgeToken();
+      document.getElementById('btn-standalone').href = `${STANDALONE_PREFIX}${encodeURIComponent(page.slug)}${tk ? '#bridge_token=' + encodeURIComponent(tk) : ''}`;
       document.getElementById('btn-delete-page').style.display = page.slug === 'home' ? 'none' : 'inline-flex';
 
       const styleEl = document.getElementById('dynamic-page-style');
@@ -1328,26 +1395,40 @@
       };
     }
 
-    // 3. Connect to Local Codex Bridge Daemon (ws://127.0.0.1:19820)
+    // 3. Connect to Local Codex Bridge Daemon (ws://127.0.0.1:19820?token=...)
     function connectLocalBridge() {
       const dot = document.getElementById('bridge-dot');
       const status = document.getElementById('bridge-status');
+      const token = getBridgeToken();
+
+      if (bridgeWs) {
+        try { bridgeWs.onclose = null; bridgeWs.close(); } catch (_) {}
+      }
 
       try {
-        bridgeWs = new WebSocket(LOCAL_BRIDGE_WS);
+        const wsUrl = token ? `${LOCAL_BRIDGE_WS}?token=${encodeURIComponent(token)}` : LOCAL_BRIDGE_WS;
+        bridgeWs = new WebSocket(wsUrl);
       } catch (e) {
         setTimeout(connectLocalBridge, 3000);
         return;
       }
 
       bridgeWs.onopen = () => {
+        bridgeAuthFailed = false;
         dot.classList.add('online');
-        status.textContent = '🟢 本地 Bridge 已连接';
+        status.textContent = 'Bridge 已连接';
         loadChatSessionsFromBridge();
       };
 
       bridgeWs.onmessage = async (event) => {
         const msg = JSON.parse(event.data);
+
+        if (msg.method === 'bridge.auth_error') {
+          bridgeAuthFailed = true;
+          dot.classList.remove('online');
+          status.textContent = 'Bridge 需配对 Token (点击配对)';
+          return;
+        }
 
         if (msg.method === 'local_plugins.sync') {
           const { plugins = [], changedSlug, switchActive } = msg.params || {};
@@ -1383,7 +1464,11 @@
 
       bridgeWs.onclose = () => {
         dot.classList.remove('online');
-        status.textContent = '🟠 本地 Bridge 重连中...';
+        if (bridgeAuthFailed) {
+          status.textContent = 'Bridge 需配对 Token (点击配对)';
+          return;
+        }
+        status.textContent = 'Bridge 重连中...';
         setTimeout(connectLocalBridge, 2500);
       };
     }
@@ -1427,7 +1512,7 @@
 
     async function loadChatSessionsFromBridge() {
       try {
-        const r = await fetch(`${LOCAL_BRIDGE_HTTP}/chat-sessions`);
+        const r = await bridgeFetch('/chat-sessions');
         if (r.ok) {
           const d = await r.json();
           if (Array.isArray(d.sessions) && d.sessions.length > 0) {
@@ -1452,7 +1537,7 @@
     function persistChatSessions() {
       localStorage.setItem('codex_chat_sessions_backup', JSON.stringify(chatSessions));
       updateHistoryBadge();
-      fetch(`${LOCAL_BRIDGE_HTTP}/chat-sessions`, {
+      bridgeFetch('/chat-sessions', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessions: chatSessions })
@@ -1603,7 +1688,7 @@
           params: { requestId: currentRunningRequestId }
         }));
       }
-      fetch(`${LOCAL_BRIDGE_HTTP}/codex/stop`, {
+      bridgeFetch('/codex/stop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId: currentRunningRequestId })
@@ -1788,7 +1873,7 @@
         return res.json();
       },
       fetchProxy: async (url, options = {}) => {
-        const res = await window.fetch(`${LOCAL_BRIDGE_HTTP}/proxy`, {
+        const res = await bridgeFetch('/proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1854,7 +1939,7 @@
         localPluginsMap.clear();
         for (const p of cloudPlugins) localPluginsMap.set(p.slug, p);
         if (syncToLocalBridge && cloudPlugins.length > 0) {
-          fetch(`${LOCAL_BRIDGE_HTTP}/local-plugins`, {
+          bridgeFetch('/local-plugins', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ plugins: cloudPlugins })
@@ -1917,7 +2002,7 @@
         switchActive: true
       };
       try {
-        const r = await fetch(`${LOCAL_BRIDGE_HTTP}/local-plugins`, {
+        const r = await bridgeFetch('/local-plugins', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newPlugin)
@@ -2150,7 +2235,7 @@
 
       // Priority 1: Save to Local Bridge (`local-plugins/<slug>.json`)
       try {
-        const res = await fetch(`${LOCAL_BRIDGE_HTTP}/local-plugins/${encodeURIComponent(slug)}`, {
+        const res = await bridgeFetch(`/local-plugins/${encodeURIComponent(slug)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -2185,7 +2270,7 @@
       const slug = currentPageData.slug;
       if (localPluginsMap.has(slug)) {
         try {
-          const r = await fetch(`${LOCAL_BRIDGE_HTTP}/local-plugins/${encodeURIComponent(slug)}/rollback`, {
+          const r = await bridgeFetch(`/local-plugins/${encodeURIComponent(slug)}/rollback`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({})
@@ -2215,7 +2300,7 @@
       const slug = currentPageData.slug;
       if (!confirm(`确定要删除本地插件页面「${currentPageData.title} (/${slug})」吗？`)) return;
       try {
-        await fetch(`${LOCAL_BRIDGE_HTTP}/local-plugins/${encodeURIComponent(slug)}`, { method: 'DELETE' });
+        await bridgeFetch(`/local-plugins/${encodeURIComponent(slug)}`, { method: 'DELETE' });
       } catch (_) {}
       localPluginsMap.delete(slug);
       localStorage.setItem(`codex_user_plugins_${currentUserId}`, JSON.stringify([...localPluginsMap.values()]));
@@ -2225,11 +2310,12 @@
     };
 
     // ============================================================================
-    // 6. BYOA Local Agent Setup Modal (Prompt for Agent + Bundle Download)
+    // 6. BYOA Local Agent Setup Modal (Prompt for Agent + Token Pairing + Bundle)
     // ============================================================================
     const SITE_PUBLIC_BASE = location.origin + (location.pathname.startsWith('/codex-studio') ? '/codex-studio' : '');
 
     function openAgentSetupModal() {
+      document.getElementById('input-bridge-token').value = getBridgeToken();
       const promptText = `请帮我安装并启动当前网站 (${SITE_PUBLIC_BASE}) 的本地 Agent 桥接服务 (Local Bridge) 与 MCP 插件：
 
 1. 请先读取该网站的线上 Agent 安装规范：
@@ -2242,7 +2328,7 @@
 
 4. 在后台启动本地桥接守护进程：
    nohup node ~/.byoa-web-bridge/bridge-daemon.mjs > ~/.byoa-web-bridge/bridge.log 2>&1 &
-   并请求 http://127.0.0.1:19820/health 确认本地桥接服务已启动成功。`;
+   启动后读取 ~/.byoa-web-bridge/.bridge-token 中的密钥，并向我输出带有 #bridge_token=<TOKEN> 的专属配对链接（格式：${SITE_PUBLIC_BASE}/#home&bridge_token=<TOKEN>），以便我点击即可完成浏览器与本机 Bridge 的安全配对！`;
 
       const shellCmd = `curl -fsSL ${SITE_PUBLIC_BASE}/install.sh | bash`;
 
@@ -2258,6 +2344,22 @@
     document.getElementById('btn-close-setup-modal').onclick = () => {
       document.getElementById('agent-setup-modal').classList.remove('open');
     };
+    document.getElementById('btn-save-bridge-token').onclick = () => {
+      const val = document.getElementById('input-bridge-token').value.trim();
+      localStorage.setItem('codex_bridge_token', val);
+      showToast('🔑 已保存本地 Bridge Token，正在重新连接...');
+      connectLocalBridge();
+    };
+    document.getElementById('btn-copy-pairing-url').onclick = async () => {
+      const tk = document.getElementById('input-bridge-token').value.trim() || getBridgeToken();
+      if (!tk) {
+        alert('请先在输入框中填入本机 .bridge-token，或从本地 Bridge 启动日志中获取配对链接');
+        return;
+      }
+      const pairUrl = `${SITE_PUBLIC_BASE}/#${currentSlug}&bridge_token=${encodeURIComponent(tk)}`;
+      await navigator.clipboard.writeText(pairUrl);
+      showToast('🔗 已复制带 #bridge_token 的安全配对链接！');
+    };
     document.getElementById('btn-copy-agent-prompt').onclick = async () => {
       const txt = document.getElementById('agent-setup-prompt-box').textContent;
       await navigator.clipboard.writeText(txt);
@@ -2268,6 +2370,13 @@
       await navigator.clipboard.writeText(txt);
       showToast('📋 已复制终端一键安装命令！');
     };
+
+    window.addEventListener('hashchange', () => {
+      const nextSlug = parseHashAndBridgeToken();
+      if (nextSlug && nextSlug !== currentSlug) {
+        selectPage(nextSlug, false);
+      }
+    });
 
     // Init
     (async () => {

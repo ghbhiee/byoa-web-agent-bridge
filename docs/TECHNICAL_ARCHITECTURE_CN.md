@@ -306,15 +306,43 @@ const cleanup = await runtimeFn(rootEl, window.agentBridge, window.agentBridge.s
 
 ---
 
-## 六、 纵深安全架构：本地桥接服务 5 道防线 + 服务端 3 道防线
+## 六、 纵深安全架构：URL `#bridge_token` 零泄露鉴权 + 本地桥接 5 道防线 + 服务端 3 道防线
+
+### 1. 为什么本地 `127.0.0.1:19820` 必须强制 Token 鉴权？
+如果本地桥接服务只监听 `127.0.0.1:19820` 而不做身份认证，仍然面临两大本地安全威胁：
+1. **同机恶意进程或低权限沙箱探测**：本机运行的其他非受信进程、第三方脚本或多人共享服务器上的其他系统用户，可以直接调用 `http://127.0.0.1:19820/proxy` 或触发无头 `codex exec`。
+2. **浏览器跨标签页试探攻击**：用户在浏览器打开其他不可信网页时，若未严格校验配对凭证，可能被尝试连接本地回环端口。
+
+### 2. 为什么采用 URL Fragment（`#bridge_token=<TOKEN>`）传递配对密钥是最优解？
+根据 **RFC 3986 Section 3.5** 规范，URL 中 `#` 号后面的 Fragment Identifier（锚点片段）具有一个极其关键的安全属性：**它仅在浏览器本地客户端内存中进行解析，浏览器在发起任何 HTTP/HTTPS 请求或发送 `Referer` 头时，绝对不会将 `#` 及其后面的内容发送给远端服务器！**
+
+#### `#bridge_token` 零泄露全链路工作流：
+```text
+[1. 本机启动 bridge-daemon.mjs]
+   ├─ 自动生成 256-bit CSPRNG 随机密钥 (如 bt_68cbdf05...)
+   ├─ 写入本机 ~/.byoa-web-bridge/.bridge-token (权限 0600，仅当前系统用户可读)
+   └─ 终端输出配对链接: https://app.example.com/#home&bridge_token=bt_68cbdf05...
+
+[2. 用户点击链接打开浏览器]
+   ├─ 浏览器向 app.example.com 发起 GET / 请求 (HTTP 报文不含 #bridge_token，服务端/Nginx 零日志泄露)
+   ├─ 前端 JS 执行 parseHashAndBridgeToken() 提取 bt_68cbdf05... 存入 localStorage["codex_bridge_token"]
+   └─ 立即调用 history.replaceState(null, '', '#home') 从浏览器地址栏抹除 Token (防窥屏、防截图或分享链接泄露)
+
+[3. 双通道定长防时序攻击校验 (crypto.timingSafeEqual)]
+   ├─ WebSocket 握手: ws://127.0.0.1:19820?token=bt_68cbdf05... (未授权连接立即返回 bridge.auth_error 并断开)
+   ├─ HTTP 接口调用: 请求头携带 X-Bridge-Token: bt_68cbdf05... (未授权一律返回 401 UNAUTHORIZED_BRIDGE_TOKEN)
+   └─ 本地 MCP 工具: mcp-server.mjs 自动读取同目录 0600 权限的 .bridge-token 并注入 X-Bridge-Token 头
+```
+
+### 3. 端到端 8 道安全防线全景表
 
 | 端侧 | 安全防线 | 抵御的风险场景 | 具体工程实现 |
 | :--- | :--- | :--- | :--- |
 | **本地桥接端** | **1. 严格绑定回环地址** | 防止同一局域网其他机器扫描连接本地 Bridge | `server.listen(19820, '127.0.0.1')`，严禁绑定 `0.0.0.0` |
-| **本地桥接端** | **2. `Origin` 强白名单校验** | 防止恶意钓鱼网站发起跨站请求伪造或跨站 WebSocket 劫持 (CSWSH) | HTTP 与 WebSocket 握手强制校验 `req.headers.origin`，仅放行 `https://app.example.com`，其余一律 `403` |
-| **本地桥接端** | **3. URL Hash Fragment 高熵令牌配对 (RFC 3986)** | 防止未授权网页或同机其他进程偷调 `/proxy` 或无头 Agent | 启动时生成 24 字节随机 Token，通过 `#bridgeToken=<token>` 传入浏览器（Fragment 绝不发送给远端服务器，零日志泄露）；所有请求强制校验 `X-Bridge-Token` |
-| **本地桥接端** | **4. W3C Secure Context 与 Chrome PNA 合规** | 解决 HTTPS 网站访问 `127.0.0.1` 的混合内容与私有网络预检拦截 | 响应头显式返回 `Access-Control-Allow-Private-Network: true` 与精确的 `Access-Control-Allow-Origin` |
-| **本地桥接端** | **5. 本地 `/proxy` 协议与内网元数据保护** | 防止通过代理探测敏感协议或路径穿越 | `/proxy` 仅允许 `http:` / `https:`，拦截 `169.254.169.254` 等敏感地址，限制超时与响应体积；MCP 路径强制 `path.basename` 清洗 |
+| **本地桥接端** | **2. `Origin` 强白名单校验** | 防止恶意钓鱼网站发起跨站请求伪造或跨站 WebSocket 劫持 (CSWSH) | HTTP 与 WebSocket 握手校验 `req.headers.origin` |
+| **本地桥接端** | **3. URL `#bridge_token` 零泄露配对 + `0600` 本地密钥** | 防止未授权网页或同机其他进程偷调 `/proxy`、`/local-plugins` 或无头 Agent | 启动时生成 256-bit 随机 Token 存入 `.bridge-token` (`0600`)，通过 `#bridge_token=<token>` 传入浏览器并立即 `history.replaceState` 擦除；HTTP (`X-Bridge-Token`) 与 WS (`?token=`) 均通过 `crypto.timingSafeEqual` 强制校验 |
+| **本地桥接端** | **4. W3C Secure Context 与 Chrome PNA 合规** | 解决 HTTPS 网站访问 `127.0.0.1` 的混合内容与私有网络预检拦截 | 响应头显式返回 `Access-Control-Allow-Private-Network: true` 与 `Access-Control-Allow-Headers: Content-Type, Authorization, X-Bridge-Token` |
+| **本地桥接端** | **5. 本地 `/proxy` 协议与内网元数据保护** | 防止通过代理探测敏感协议或路径穿越 | `/proxy` 仅允许 `http:` / `https:`，拦截 `169.254.169.254` 等敏感地址，限制超时与响应体积；MCP 路径强制 `sanitizeSlug` 清洗 |
 | **云端服务端** | **6. 服务端零代码执行** | 防止恶意插件导致服务器 RCE 沦陷 | 服务端仅将插件作为静态 JSON 文本落盘，绝不调用 `eval` / `Function` / `vm` |
 | **云端服务端** | **7. 多租户物理隔离** | 防止用户 A 越权读写或污染用户 B 的插件 | 强制校验用户身份凭证，按 `/var/lib/web-studio/users/{userId}/plugins.json` 隔离存储 |
 | **云端服务端** | **8. 服务端 SSRF 免疫** | 防止利用中心服务器扫描机房内网 | 中心服务器不提供任何外部 URL 代理接口，外部 API 均由客户端本地 Bridge 代发 |

@@ -113,8 +113,15 @@ Please install and start the Local Agent Bridge and MCP Server for the web appli
 
 4. Start the Local Bridge Daemon in the background:
    nohup node ~/.byoa-web-bridge/bridge-daemon.mjs > ~/.byoa-web-bridge/bridge.log 2>&1 &
-   and verify http://127.0.0.1:19820/health returns {"ok": true}.
+   Then read the 256-bit secret token from ~/.byoa-web-bridge/.bridge-token and output the one-click URL Fragment pairing link (https://your-web-app.example.com/#home&bridge_token=<TOKEN>) so I can click it to pair my browser with the local bridge with zero network leakage!
 ```
+
+### 🔒 Zero-Leakage Local Bridge Token Authentication (`#bridge_token`)
+
+To prevent untrusted local processes or drive-by malicious websites from invoking `127.0.0.1:19820`:
+- **256-bit CSPRNG Token (`0600` file permissions)**: On startup, `bridge-daemon.mjs` generates a random secret (`bt_...`) in `~/.byoa-web-bridge/.bridge-token` (`chmod 0600`).
+- **RFC 3986 URL Fragment Pairing (`#bridge_token=<TOKEN>`)**: Users open `https://your-web-app.example.com/#home&bridge_token=<TOKEN>`. Because URL fragments (`#...`) are **never sent in HTTP requests or `Referer` headers**, the remote web server never sees the token. The browser JS extracts `bridge_token` into `localStorage` and immediately scrubs the address bar via `history.replaceState`.
+- **Constant-Time Verification (`crypto.timingSafeEqual`)**: Every WebSocket connection (`?token=<TOKEN>`) and HTTP request (`X-Bridge-Token: <TOKEN>`) is strictly verified.
 
 ---
 
@@ -170,7 +177,7 @@ Please install and start the Local Agent Bridge and MCP Server for the web appli
 
 4. 在后台启动本地桥接守护进程：
    nohup node ~/.byoa-web-bridge/bridge-daemon.mjs > ~/.byoa-web-bridge/bridge.log 2>&1 &
-   并请求 http://127.0.0.1:19820/health 确认本地桥接服务已启动成功。
+   启动后读取 ~/.byoa-web-bridge/.bridge-token 中的 256-bit 密钥，并向我输出带有 #bridge_token=<TOKEN> 的专属安全配对链接（格式：https://your-web-app.example.com/#home&bridge_token=<TOKEN>），以便我点击即可完成浏览器与本机 Bridge 的零泄露鉴权配对！
 ```
 
 ---
