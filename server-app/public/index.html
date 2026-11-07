@@ -1,0 +1,2282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Codex Web Studio · 本地优先插件注入与双向桥接工作台</title>
+  <style>
+    :root {
+      --bg: #070b14;
+      --panel-bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #1e293b;
+      --border-light: #334155;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.16);
+      --green: #34d399;
+      --amber: #fbbf24;
+      --rose: #f43f5e;
+      --purple: #c084fc;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --font-mono: "JetBrains Mono", Menlo, Consolas, Monaco, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Top Header */
+    .top-nav {
+      height: 54px;
+      background: #090e1a;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      flex-shrink: 0;
+      z-index: 30;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 15px;
+    }
+    .brand-badge {
+      background: var(--accent-glow);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-family: var(--font-mono);
+    }
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      flex-wrap: wrap;
+    }
+    .conn-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 11px;
+      border-radius: 999px;
+      background: #111827;
+      border: 1px solid var(--border-light);
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--amber);
+    }
+    .dot.online {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+
+    /* Main 3-Column Layout with Collapsible Sidebar & Chat */
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 264px 1fr 420px;
+      overflow: hidden;
+      position: relative;
+      transition: grid-template-columns 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .workspace.sidebar-collapsed {
+      grid-template-columns: 82px 1fr 420px;
+    }
+    .workspace.chat-collapsed {
+      grid-template-columns: 264px 1fr 0px;
+    }
+    .workspace.sidebar-collapsed.chat-collapsed {
+      grid-template-columns: 82px 1fr 0px;
+    }
+
+    /* Left Sidebar: Large Icon Support + Collapsible Dock */
+    .sidebar {
+      background: var(--panel-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+    .sidebar-header {
+      padding: 12px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      min-height: 50px;
+    }
+    .sidebar-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .sidebar-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .btn-icon {
+      background: #1e293b;
+      color: var(--accent);
+      border: 1px solid var(--border-light);
+      border-radius: 7px;
+      padding: 5px 9px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-icon:hover { background: #334155; border-color: var(--accent); }
+    .btn-icon.active-toggle {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .page-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .page-item {
+      padding: 8px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.16s ease;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: relative;
+      background: rgba(15, 23, 42, 0.45);
+    }
+    .page-item:hover {
+      background: rgba(30, 41, 59, 0.85);
+      border-color: rgba(148, 163, 184, 0.25);
+      transform: translateY(-1px);
+    }
+    .page-item.active {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, rgba(15, 23, 42, 0.9) 100%);
+      border-color: rgba(56, 189, 248, 0.5);
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.18);
+    }
+
+    /* Large Icon Tile */
+    .page-icon-tile {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(145deg, #1e293b, #0f172a);
+      border: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 23px;
+      flex-shrink: 0;
+      position: relative;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+      transition: all 0.16s ease;
+    }
+    .page-item.active .page-icon-tile {
+      border-color: var(--accent);
+      background: linear-gradient(145deg, rgba(56, 189, 248, 0.25), #0f172a);
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.3);
+      transform: scale(1.04);
+    }
+    .page-source-dot {
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      border: 2px solid #0f172a;
+      background: #94a3b8;
+    }
+    .page-source-dot.local {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    .page-item-body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .page-item-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .page-item-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .page-item-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+    }
+
+    /* Collapsed Sidebar Mode -> Large Icon Dock */
+    .workspace.sidebar-collapsed .sidebar-title-text,
+    .workspace.sidebar-collapsed .page-item-body,
+    .workspace.sidebar-collapsed .sidebar-footer,
+    .workspace.sidebar-collapsed .btn-new-text {
+      display: none;
+    }
+    .workspace.sidebar-collapsed .sidebar-header {
+      flex-direction: column;
+      justify-content: center;
+      padding: 10px 6px;
+      gap: 8px;
+    }
+    .workspace.sidebar-collapsed .sidebar-header-actions {
+      flex-direction: column;
+      width: 100%;
+    }
+    .workspace.sidebar-collapsed .page-list {
+      padding: 10px 8px;
+      align-items: center;
+    }
+    .workspace.sidebar-collapsed .page-item {
+      padding: 6px;
+      justify-content: center;
+      width: 62px;
+      height: 62px;
+      border-radius: 16px;
+    }
+    .workspace.sidebar-collapsed .page-icon-tile {
+      width: 50px;
+      height: 50px;
+      font-size: 27px;
+      border-radius: 14px;
+    }
+
+    .sidebar-footer {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.5;
+      background: #090e1a;
+    }
+    .sidebar-footer code {
+      color: var(--accent);
+      font-family: var(--font-mono);
+    }
+
+    /* Center Stage: Live Page Canvas */
+    .stage {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #070b14;
+      min-width: 0;
+    }
+    .stage-toolbar {
+      height: 48px;
+      background: #0b1120;
+      border-bottom: 1px solid var(--border);
+      padding: 0 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .stage-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .slug-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 2px 8px;
+      border-radius: 5px;
+    }
+    .stage-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .tool-btn {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid var(--border-light);
+      padding: 5px 11px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .tool-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .tool-btn.danger:hover { border-color: var(--rose); color: var(--rose); }
+    .tool-btn.primary {
+      background: var(--accent);
+      color: #070b14;
+      border-color: var(--accent);
+    }
+    .tool-btn.primary:hover { background: #7dd3fc; color: #070b14; }
+
+    .canvas-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px;
+    }
+    #live-page-canvas {
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+
+    /* Floating Reopen Chat Pill when Chat is Collapsed */
+    .chat-reopen-fab {
+      position: fixed;
+      right: 18px;
+      bottom: 24px;
+      z-index: 90;
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      color: #070b14;
+      font-weight: 800;
+      font-size: 13px;
+      padding: 10px 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.25);
+      box-shadow: 0 12px 32px rgba(2, 132, 199, 0.45);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+    .workspace.chat-collapsed ~ .chat-reopen-fab {
+      display: inline-flex;
+    }
+
+    /* Right Panel: Codex Headless Chat */
+    .chat-panel {
+      background: var(--panel-bg);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      min-width: 0;
+    }
+    .workspace.chat-collapsed .chat-panel {
+      border-left: none;
+      pointer-events: none;
+      opacity: 0;
+    }
+    .chat-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: #0b1120;
+    }
+    .chat-header-title {
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .chat-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* History Sessions Drawer */
+    .history-drawer {
+      position: absolute;
+      top: 47px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(9, 14, 26, 0.97);
+      backdrop-filter: blur(12px);
+      z-index: 40;
+      display: none;
+      flex-direction: column;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .history-drawer.open {
+      display: flex;
+    }
+    .history-drawer-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .history-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .history-item {
+      padding: 11px 13px;
+      border-radius: 10px;
+      background: #111827;
+      border: 1px solid var(--border-light);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      transition: all 0.15s;
+    }
+    .history-item:hover {
+      border-color: var(--accent);
+      background: #1e293b;
+    }
+    .history-item.active {
+      border-color: var(--green);
+      background: rgba(52, 211, 153, 0.1);
+    }
+    .history-item-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .history-item-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+    .history-item-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+    }
+    .history-del-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .history-del-btn:hover {
+      color: var(--rose);
+      background: rgba(244, 63, 94, 0.15);
+    }
+
+    .quick-prompts {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      background: #0b1120;
+    }
+    .chip {
+      font-size: 11px;
+      background: #1e293b;
+      color: #cbd5e1;
+      border: 1px solid var(--border-light);
+      padding: 4px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .chip:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .msg {
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.6;
+      max-width: 95%;
+      word-break: break-word;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: #0284c7;
+      color: #fff;
+      border-bottom-right-radius: 3px;
+    }
+    .msg.assistant {
+      align-self: flex-start;
+      background: #1e293b;
+      border: 1px solid var(--border-light);
+      color: #f1f5f9;
+      border-bottom-left-radius: 3px;
+      width: 100%;
+    }
+    .msg-steps {
+      margin-bottom: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .step-pill {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: #090e1a;
+      border: 1px solid #1e293b;
+      color: var(--accent);
+      padding: 5px 9px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+    }
+    .step-pill.done { color: var(--green); border-color: rgba(52, 211, 153, 0.25); }
+    .step-pill.stopped { color: var(--rose); border-color: rgba(244, 63, 94, 0.35); }
+    .msg-text {
+      white-space: pre-wrap;
+    }
+
+    .chat-input-area {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      background: #090e1a;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .chat-textarea {
+      width: 100%;
+      min-height: 74px;
+      max-height: 160px;
+      background: #111827;
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: #fff;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      resize: vertical;
+      outline: none;
+    }
+    .chat-textarea:focus { border-color: var(--accent); }
+    .chat-bottom-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .session-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chat-submit-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-send {
+      background: var(--accent);
+      color: #070b14;
+      border: none;
+      padding: 7px 15px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-send:hover:not(:disabled) { background: #7dd3fc; }
+    .btn-send:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-stop {
+      background: var(--rose);
+      color: #fff;
+      border: none;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 0 14px rgba(244, 63, 94, 0.4);
+    }
+    .btn-stop.visible {
+      display: inline-flex;
+    }
+
+    /* Multi-Tab Monaco IDE + Live Preview Workbench Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 6, 12, 0.82);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    .modal-backdrop.open { display: flex; }
+    .ide-modal {
+      width: 94vw;
+      height: 90vh;
+      max-width: 1520px;
+      background: #0b1120;
+      border: 1px solid var(--border-light);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.65);
+    }
+    .ide-topbar {
+      height: 54px;
+      padding: 0 18px;
+      background: #070b14;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .ide-meta-inputs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ide-input {
+      background: #111827;
+      border: 1px solid #334155;
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 7px;
+      font-size: 12.5px;
+    }
+    .ide-subbar {
+      height: 42px;
+      padding: 0 16px;
+      background: #0f172a;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .ide-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      height: 100%;
+    }
+    .ide-tab {
+      height: 100%;
+      padding: 0 16px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.15s;
+    }
+    .ide-tab:hover { color: #fff; background: rgba(255,255,255,0.03); }
+    .ide-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .ide-view-modes {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .ide-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
+      min-height: 0;
+    }
+    .ide-body.mode-code { grid-template-columns: 1fr 0px; }
+    .ide-body.mode-preview { grid-template-columns: 0px 1fr; }
+
+    .ide-editor-pane {
+      position: relative;
+      height: 100%;
+      overflow: hidden;
+      border-right: 1px solid var(--border);
+      background: #1e1e1e;
+    }
+    #monaco-host {
+      width: 100%;
+      height: 100%;
+    }
+    #fallback-code-textarea {
+      width: 100%;
+      height: 100%;
+      background: #060911;
+      color: #e2e8f0;
+      border: none;
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.6;
+      resize: none;
+      outline: none;
+      display: none;
+    }
+
+    .ide-preview-pane {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+      background: #070b14;
+    }
+    .ide-preview-header {
+      height: 34px;
+      padding: 0 14px;
+      background: #090e1a;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .ide-preview-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+    #ide-preview-canvas {
+      max-width: 100%;
+      margin: 0 auto;
+    }
+
+    /* Toast */
+    #toast-box {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      background: #064e3b;
+      border: 1px solid var(--green);
+      color: #ecfdf5;
+      padding: 9px 18px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    }
+  </style>
+  <style id="dynamic-page-style"></style>
+  <style id="ide-preview-style"></style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="top-nav">
+    <div class="brand">
+      <span>⚡ Codex Web Studio</span>
+      <span class="brand-badge">Local-First 插件注入 ⇄ 多租户同步</span>
+    </div>
+    <div class="status-bar">
+      <div class="conn-pill" style="gap:8px;">
+        <span>👤 租户:</span>
+        <select id="user-select" style="background:#0f172a;color:#38bdf8;border:1px solid #334155;border-radius:5px;padding:2px 6px;font-size:11px;font-weight:700;">
+          <option value="default">default (默认主账号)</option>
+          <option value="alice">alice (测试租户 A)</option>
+          <option value="bob">bob (测试租户 B)</option>
+        </select>
+        <button class="btn-icon" id="btn-sync-push" title="将本机插件同步备份至云端个人账号目录">☁️ 同步到云端</button>
+        <button class="btn-icon" id="btn-sync-pull" title="从云端拉取当前账号的插件">📥 云端拉取</button>
+      </div>
+      <div class="conn-pill">
+        <span class="dot online" id="sse-dot"></span>
+        <span id="sse-status">云端已连接</span>
+      </div>
+      <div class="conn-pill" id="bridge-conn-pill" style="cursor:pointer;" title="点击查看如何将你的本地 Agent (Bridge/MCP) 接入此网站">
+        <span class="dot" id="bridge-dot"></span>
+        <span id="bridge-status">连接本地 Bridge (127.0.0.1:19820)...</span>
+      </div>
+      <button class="btn-icon" id="btn-agent-setup" style="border-color:rgba(16,185,129,0.5);color:#34d399;background:rgba(16,185,129,0.12);" title="获取给本地 Agent 自动安装本网站 MCP 与 Bridge 服务的 Prompt 及安装包">📦 接入本地 Agent (安装 MCP/Bridge)</button>
+      <button class="btn-icon active-toggle" id="btn-toggle-chat" title="打开或关闭右侧 AI 对话面板">💬 AI 对话栏</button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <div class="workspace" id="workspace">
+
+    <!-- Left Sidebar: Collapsible into Large Icons -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-header-left">
+          <button class="btn-icon" id="btn-toggle-sidebar" title="折叠/展开左侧导航为大图标模式">◀</button>
+          <span class="sidebar-title-text">🔌 页面与本地插件</span>
+        </div>
+        <div class="sidebar-header-actions">
+          <button class="btn-icon" id="btn-create-blank" title="新建本地插件页面">➕ <span class="btn-new-text">新建</span></button>
+        </div>
+      </div>
+      <div class="page-list" id="page-list"></div>
+      <div class="sidebar-footer">
+        📁 本地插件目录：<br>
+        <code>./local-plugins/*.json</code><br>
+        支持本地 Codex 实时注入与跨域代理。
+      </div>
+    </aside>
+
+    <!-- Center Stage: Live Page Canvas -->
+    <main class="stage">
+      <div class="stage-toolbar">
+        <div class="stage-info">
+          <span id="cur-page-icon" style="font-size:18px;">🏠</span>
+          <strong id="cur-page-title">加载中...</strong>
+          <span class="slug-badge" id="cur-page-slug">/home</span>
+          <span style="font-size:11px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="cur-page-meta"></span>
+        </div>
+        <div class="stage-actions">
+          <button class="tool-btn primary" id="btn-edit-source">📝 源码与实时预览 (IDE)</button>
+          <button class="tool-btn" id="btn-rollback">⏪ 回滚上一版 (<span id="rev-count">0</span>)</button>
+          <a class="tool-btn" id="btn-standalone" href="/codex-studio/p/home" target="_blank" title="在新标签页中独立运行此页面或本地插件">🔗 独立链接打开</a>
+          <button class="tool-btn danger" id="btn-delete-page">🗑️ 删除</button>
+        </div>
+      </div>
+
+      <div class="canvas-scroll">
+        <div id="live-page-canvas"></div>
+      </div>
+    </main>
+
+    <!-- Right Panel: Collapsible Local Codex Chat with History & Stop -->
+    <aside class="chat-panel">
+      <div class="chat-header">
+        <div class="chat-header-title">
+          <span>🤖 本地 Codex 无头终端</span>
+        </div>
+        <div class="chat-header-actions">
+          <button class="btn-icon" id="btn-history-sessions" title="查看与切换历史对话">🕒 历史 (<span id="history-count">0</span>)</button>
+          <button class="btn-icon" id="btn-reset-chat" title="开启新对话">➕ 新对话</button>
+          <button class="btn-icon" id="btn-close-chat" title="收起右侧对话面板">✕</button>
+        </div>
+      </div>
+
+      <!-- Slide-Down History Sessions Drawer -->
+      <div class="history-drawer" id="history-drawer">
+        <div class="history-drawer-header">
+          <span>🕒 历史对话记录 (点击即可切换恢复上下文)</span>
+          <button class="btn-icon" id="btn-close-history">返回对话</button>
+        </div>
+        <div class="history-list" id="history-list"></div>
+      </div>
+
+      <div class="quick-prompts">
+        <span class="chip" data-prompt="请创建一个 slug 为 stock-quote、标题为「实时股票行情看板」的本地插件页面，使用 bridge.fetchProxy 访问新浪财经接口获取茅台、苹果、英伟达实时股价并每 5 秒刷新。">📈 新建股票行情页(走桥接代理)</span>
+        <span class="chip" data-prompt="请修改当前页面，在顶部增加一个精致的实时数字时钟与快捷便签区域。">✨ 增强当前页面</span>
+      </div>
+
+      <div class="chat-messages" id="chat-messages"></div>
+
+      <div class="chat-input-area">
+        <textarea class="chat-textarea" id="chat-input" placeholder="输入指令让本地 Codex 生成/修改本地插件 (支持中文输入法候选词回车，Enter 发送，Shift+Enter 换行)..."></textarea>
+        <div class="chat-bottom-row">
+          <span class="session-tag" id="session-tag">Session: 新对话</span>
+          <div class="chat-submit-group">
+            <button class="btn-stop" id="btn-stop-chat">⏹ 停止生成</button>
+            <button class="btn-send" id="btn-send">发送指令 ↵</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- Floating Reopen Chat Pill -->
+  <button class="chat-reopen-fab" id="chat-reopen-fab">💬 展开 AI 对话栏</button>
+
+  <!-- Upgraded Multi-Tab Monaco IDE + Split Live Preview Modal -->
+  <div class="modal-backdrop" id="editor-modal">
+    <div class="ide-modal">
+      <div class="ide-topbar">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="font-weight:800;font-size:14px;color:#fff;">🛠️ 插件源码与实时预览工作台</span>
+          <span class="slug-badge" id="modal-slug">/home</span>
+          <div class="ide-meta-inputs">
+            <input class="ide-input" id="edit-icon" placeholder="图标" style="width:52px;text-align:center;" title="页面大图标 (Emoji)">
+            <input class="ide-input" id="edit-title" placeholder="页面或插件标题" style="width:220px;">
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="font-size:12px;color:var(--text-muted);display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="chk-auto-preview" checked> ⚡ 自动实时预览
+          </label>
+          <button class="tool-btn" id="btn-run-preview">▶️ 刷新预览</button>
+          <button class="tool-btn primary" id="btn-save-source">💾 保存到本地插件 (⌘S)</button>
+          <button class="tool-btn" id="btn-close-modal">✕ 关闭</button>
+        </div>
+      </div>
+
+      <div class="ide-subbar">
+        <div class="ide-tabs">
+          <button class="ide-tab active" data-tab="html">📄 HTML 结构 <code>index.html</code></button>
+          <button class="ide-tab" data-tab="css">🎨 CSS 样式 <code>style.css</code></button>
+          <button class="ide-tab" data-tab="js">⚡ JavaScript 逻辑 <code>script.js</code></button>
+          <button class="ide-tab" data-tab="json">📦 完整插件清单 <code>plugin.json</code></button>
+        </div>
+        <div class="ide-view-modes">
+          <span style="color:var(--text-dim);">视图布局:</span>
+          <button class="btn-icon active-toggle" data-layout="split" id="layout-split">🖥️ 分栏 (源码+预览)</button>
+          <button class="btn-icon" data-layout="code" id="layout-code">📝 仅源码</button>
+          <button class="btn-icon" data-layout="preview" id="layout-preview">👁️ 仅预览</button>
+        </div>
+      </div>
+
+      <div class="ide-body" id="ide-body">
+        <div class="ide-editor-pane">
+          <div id="monaco-host"></div>
+          <textarea id="fallback-code-textarea" spellcheck="false"></textarea>
+        </div>
+        <div class="ide-preview-pane">
+          <div class="ide-preview-header">
+            <span>👁️ 实时沙箱预览 (Live Preview Sandbox · 支持 bridge.fetchProxy)</span>
+            <span id="preview-status" style="color:var(--green);">就绪</span>
+          </div>
+          <div class="ide-preview-scroll">
+            <div id="ide-preview-canvas"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BYOA: Local Agent MCP & Bridge Onboarding Modal -->
+  <div class="modal-backdrop" id="agent-setup-modal">
+    <div class="ide-modal" style="width:820px;max-width:94vw;height:auto;max-height:88vh;overflow-y:auto;">
+      <div class="ide-topbar">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:18px;">🤖</span>
+          <strong style="font-size:15px;color:#fff;">接入你的本地 Agent (BYOA · 安装本网站专属 MCP & Bridge)</strong>
+        </div>
+        <button class="tool-btn" id="btn-close-setup-modal">✕ 关闭</button>
+      </div>
+      <div style="padding:22px 24px;display:flex;flex-direction:column;gap:18px;line-height:1.65;font-size:13px;color:var(--text-main);">
+        <div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:10px;padding:14px 16px;">
+          <div style="font-weight:700;color:var(--accent);margin-bottom:4px;">💡 为什么使用你自己的本地 Agent (Bring Your Own Agent)？</div>
+          <div style="color:var(--text-muted);font-size:12.5px;">
+            无需适应网站内置的低配云端 AI。直接把这段 Prompt 发给你自己电脑上的 <strong>Codex / Claude Code / Cursor / OpenClaw</strong>，你的本地 Agent 会自动从本网站下载零依赖桥接服务与 <code>page_studio</code> MCP 插件。所有跨平台敏感数据查询（如跨券商/银行持仓汇总、报税规划、外部行情接口）与自定义页面注入均在<strong>你本机 127.0.0.1 完成</strong>，数据不出本机，且直接复用你最熟悉的网站界面！
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <strong style="color:#fff;font-size:13.5px;">方式一（最推荐）：直接复制以下 Prompt 发送给你的本地 Agent</strong>
+            <button class="tool-btn primary" id="btn-copy-agent-prompt">📋 一键复制给 Agent 的安装 Prompt</button>
+          </div>
+          <pre id="agent-setup-prompt-box" style="background:#060911;border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-family:var(--font-mono);font-size:12px;color:#a7f3d0;white-space:pre-wrap;word-break:break-all;margin:0;user-select:all;"></pre>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <strong style="color:#fff;font-size:13.5px;">方式二：在本地终端一行命令自动安装并启动</strong>
+            <button class="tool-btn" id="btn-copy-shell-cmd">📋 复制终端命令</button>
+          </div>
+          <pre id="agent-setup-shell-box" style="background:#060911;border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-family:var(--font-mono);font-size:12px;color:#38bdf8;white-space:pre-wrap;word-break:break-all;margin:0;user-select:all;"></pre>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border);">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <a class="tool-btn" id="link-download-bundle" href="bridge-bundle.tar.gz" download="bridge-bundle.tar.gz">⬇️ 直接下载安装包 (bridge-bundle.tar.gz)</a>
+            <a class="tool-btn" id="link-view-guide" href="agent-setup-guide.md" target="_blank">📄 查看线上 Agent 安装规范 (.md)</a>
+          </div>
+          <span style="font-size:11.5px;color:var(--text-dim);">仅需 Node.js &ge; 18 · 零第三方依赖</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-box"></div>
+
+  <!-- Load Monaco Editor Loader from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.47.0/min/vs/loader.min.js"></script>
+
+  <script>
+    const API_BASE = location.pathname.startsWith('/codex-studio') ? '/codex-studio/api' : '/api';
+    const STANDALONE_PREFIX = location.pathname.startsWith('/codex-studio') ? '/codex-studio/p/' : '/p/';
+    const LOCAL_BRIDGE_WS = 'ws://127.0.0.1:19820';
+    const LOCAL_BRIDGE_HTTP = 'http://127.0.0.1:19820';
+
+    let currentUserId = localStorage.getItem('codex_studio_user_id') || 'default';
+    document.getElementById('user-select').value = currentUserId;
+
+    let pagesList = [];
+    let localPluginsMap = new Map();
+    let hostBackendData = null;
+    let currentSlug = (location.hash.slice(1).split('?')[0]) || 'home';
+    let currentPageData = null;
+    let currentCleanupFn = null;
+    let previewCleanupFn = null;
+    let bridgeWs = null;
+
+    // Chat & Session State
+    let chatSessions = [];
+    let currentSessionId = null;
+    let codexThreadId = null;
+    let isTaskRunning = false;
+    let currentRunningRequestId = null;
+    let isImeComposing = false;
+    const activeTurnDomMap = new Map();
+
+    // Monaco IDE State (declared before applyWorkspaceLayout to avoid TDZ ReferenceError)
+    let monacoEditorInstance = null;
+    let monacoModels = {};
+    let currentIdeTab = 'html';
+    let editorDraft = { html: '', css: '', js: '', json: '' };
+    let previewDebounceTimer = null;
+
+    // Layout Collapse State
+    const workspaceEl = document.getElementById('workspace');
+    let isSidebarCollapsed = localStorage.getItem('codex_sidebar_collapsed') === '1';
+    let isChatCollapsed = localStorage.getItem('codex_chat_collapsed') === '1';
+
+    function applyWorkspaceLayout() {
+      workspaceEl.classList.toggle('sidebar-collapsed', isSidebarCollapsed);
+      workspaceEl.classList.toggle('chat-collapsed', isChatCollapsed);
+      document.getElementById('btn-toggle-sidebar').textContent = isSidebarCollapsed ? '▶' : '◀';
+      document.getElementById('btn-toggle-chat').classList.toggle('active-toggle', !isChatCollapsed);
+      if (monacoEditorInstance) {
+        setTimeout(() => monacoEditorInstance.layout(), 240);
+      }
+    }
+    applyWorkspaceLayout();
+
+    document.getElementById('btn-toggle-sidebar').onclick = () => {
+      isSidebarCollapsed = !isSidebarCollapsed;
+      localStorage.setItem('codex_sidebar_collapsed', isSidebarCollapsed ? '1' : '0');
+      applyWorkspaceLayout();
+    };
+
+    function toggleChatPanel(forceOpen) {
+      isChatCollapsed = typeof forceOpen === 'boolean' ? !forceOpen : !isChatCollapsed;
+      localStorage.setItem('codex_chat_collapsed', isChatCollapsed ? '1' : '0');
+      applyWorkspaceLayout();
+    }
+    document.getElementById('btn-toggle-chat').onclick = () => toggleChatPanel();
+    document.getElementById('btn-close-chat').onclick = () => toggleChatPanel(false);
+    document.getElementById('chat-reopen-fab').onclick = () => toggleChatPanel(true);
+
+    function showToast(text) {
+      const box = document.getElementById('toast-box');
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = text;
+      box.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    function getCombinedPages() {
+      const merged = new Map();
+      for (const p of pagesList) {
+        merged.set(p.slug, { ...p, isHostPage: true });
+      }
+      for (const [slug, plugin] of localPluginsMap.entries()) {
+        if (plugin.kind !== 'page-patch') {
+          merged.set(slug, { ...plugin, isLocalPlugin: true });
+        }
+      }
+      return [...merged.values()];
+    }
+
+    // 1. Fetch & Render Remote Base Pages + Local Injected Plugins
+    async function loadPagesList() {
+      try {
+        const cached = JSON.parse(localStorage.getItem(`codex_user_plugins_${currentUserId}`) || '[]');
+        for (const p of cached) {
+          if (p.slug && !localPluginsMap.has(p.slug)) localPluginsMap.set(p.slug, p);
+        }
+      } catch (_) {}
+
+      const res = await fetch(`${API_BASE}/pages`);
+      const data = await res.json();
+      pagesList = (data.pages || []).filter(p => p.slug === 'home' || p.slug === 'playground');
+      fetch(`${API_BASE}/host/data?userId=${encodeURIComponent(currentUserId)}`)
+        .then(r => r.json())
+        .then(d => { hostBackendData = d; })
+        .catch(() => {});
+      renderSidebar();
+    }
+
+    function renderSidebar() {
+      const container = document.getElementById('page-list');
+      container.innerHTML = '';
+      const allPages = getCombinedPages();
+      for (const p of allPages) {
+        const item = document.createElement('div');
+        item.className = 'page-item' + (p.slug === currentSlug ? ' active' : '');
+        const timeStr = p.updatedAt ? new Date(p.updatedAt).toLocaleTimeString('zh-CN', { hour12: false }) : '';
+        const isLocal = Boolean(p.isLocalPlugin);
+        item.title = `${p.title} (/${p.slug}) · ${isLocal ? '本地插件实时注入' : '公共宿主底座'}`;
+
+        const sourceTag = isLocal
+          ? `<span style="color:#34d399;font-size:10px;border:1px solid rgba(52,211,153,0.35);padding:0 5px;border-radius:4px;flex-shrink:0;">🔌 本地</span>`
+          : `<span style="color:#94a3b8;font-size:10px;flex-shrink:0;">🌐 宿主</span>`;
+
+        item.innerHTML = `
+          <div class="page-icon-tile">
+            <span>${p.icon || '📄'}</span>
+            <span class="page-source-dot ${isLocal ? 'local' : ''}"></span>
+          </div>
+          <div class="page-item-body">
+            <div class="page-item-top">
+              <span class="page-item-title">${p.title}</span>
+              ${sourceTag}
+            </div>
+            <div class="page-item-meta">
+              <span>/${p.slug}</span>
+              <span>${timeStr}</span>
+            </div>
+          </div>
+        `;
+        item.onclick = () => selectPage(p.slug, true);
+        container.appendChild(item);
+      }
+    }
+
+    async function selectPage(slug, notifyServer = false) {
+      currentSlug = slug;
+      location.hash = slug;
+      renderSidebar();
+
+      if (localPluginsMap.has(slug)) {
+        const localPlugin = localPluginsMap.get(slug);
+        mountPageToCanvas(localPlugin);
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/pages/${encodeURIComponent(slug)}`);
+      if (!res.ok) {
+        if (slug !== 'home') return selectPage('home', false);
+        return;
+      }
+      const { page } = await res.json();
+      mountPageToCanvas(page);
+    }
+
+    function mountPageToCanvas(page) {
+      currentPageData = page;
+      if (typeof currentCleanupFn === 'function') {
+        try { currentCleanupFn(); } catch (_) {}
+        currentCleanupFn = null;
+      }
+
+      document.getElementById('cur-page-icon').textContent = page.icon || '📄';
+      document.getElementById('cur-page-title').textContent = page.title || page.slug;
+      document.getElementById('cur-page-slug').textContent = `/${page.slug}`;
+      const timeStr = page.updatedAt ? new Date(page.updatedAt).toLocaleString('zh-CN', { hour12: false }) : '';
+      const modeLabel = localPluginsMap.has(page.slug) ? '🔌 本地 Bridge 实时注入 (代码驻留本机)' : '🌐 公共宿主页面';
+      document.getElementById('cur-page-meta').textContent = `${modeLabel} · ${timeStr}`;
+      document.getElementById('rev-count').textContent = Array.isArray(page.revisions) ? page.revisions.length : 0;
+      document.getElementById('btn-standalone').href = `${STANDALONE_PREFIX}${encodeURIComponent(page.slug)}`;
+      document.getElementById('btn-delete-page').style.display = page.slug === 'home' ? 'none' : 'inline-flex';
+
+      const styleEl = document.getElementById('dynamic-page-style');
+      styleEl.textContent = page.css || '';
+
+      const canvas = document.getElementById('live-page-canvas');
+      canvas.innerHTML = page.html || '';
+
+      if (page.js) {
+        try {
+          const fn = new Function('root', 'bridge', 'fetch', page.js);
+          currentCleanupFn = fn(canvas, window.agentBridge, window.agentBridge.scopedFetch);
+        } catch (err) {
+          console.error('Page JS runtime error:', err);
+        }
+      }
+
+      // Inject any `page-patch` plugins targeting this host page
+      for (const [, patchPlugin] of localPluginsMap.entries()) {
+        if (patchPlugin.kind === 'page-patch' && (patchPlugin.targetPage === page.slug || patchPlugin.targetPage === '*')) {
+          const slot = canvas.querySelector(patchPlugin.targetSelector || '[data-agent-slot]') || canvas;
+          const patchBox = document.createElement('div');
+          patchBox.dataset.injectedPlugin = patchPlugin.slug;
+          patchBox.innerHTML = `<style>${patchPlugin.css || ''}</style>${patchPlugin.html || ''}`;
+          slot.appendChild(patchBox);
+          if (patchPlugin.js) {
+            try {
+              const pFn = new Function('root', 'bridge', 'fetch', patchPlugin.js);
+              pFn(patchBox, window.agentBridge, window.agentBridge.scopedFetch);
+            } catch (e) {
+              console.error('Patch plugin JS error:', e);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Subscribe to Server SSE
+    function connectServerSSE() {
+      const es = new EventSource(`${API_BASE}/events`);
+      const dot = document.getElementById('sse-dot');
+      const status = document.getElementById('sse-status');
+      es.onopen = () => {
+        dot.classList.add('online');
+        status.textContent = '云端已连接';
+      };
+      es.onerror = () => {
+        dot.classList.remove('online');
+        status.textContent = '云端重连中...';
+      };
+    }
+
+    // 3. Connect to Local Codex Bridge Daemon (ws://127.0.0.1:19820)
+    function connectLocalBridge() {
+      const dot = document.getElementById('bridge-dot');
+      const status = document.getElementById('bridge-status');
+
+      try {
+        bridgeWs = new WebSocket(LOCAL_BRIDGE_WS);
+      } catch (e) {
+        setTimeout(connectLocalBridge, 3000);
+        return;
+      }
+
+      bridgeWs.onopen = () => {
+        dot.classList.add('online');
+        status.textContent = '🟢 本地 Bridge 已连接';
+        loadChatSessionsFromBridge();
+      };
+
+      bridgeWs.onmessage = async (event) => {
+        const msg = JSON.parse(event.data);
+
+        if (msg.method === 'local_plugins.sync') {
+          const { plugins = [], changedSlug, switchActive } = msg.params || {};
+          localPluginsMap.clear();
+          for (const p of plugins) {
+            localPluginsMap.set(p.slug, p);
+          }
+          localStorage.setItem(`codex_user_plugins_${currentUserId}`, JSON.stringify(plugins));
+          renderSidebar();
+          if (switchActive && changedSlug) {
+            await selectPage(changedSlug, false);
+            showToast(`🔌 本地插件「${changedSlug}」已实时注入页面！`);
+          } else if (!changedSlug || changedSlug === currentSlug || localPluginsMap.get(changedSlug)?.targetPage === currentSlug) {
+            await selectPage(currentSlug, false);
+          }
+          return;
+        }
+
+        if (msg.method === 'codex.stream') {
+          handleCodexStreamEvent(msg.params);
+          return;
+        }
+
+        if (msg.id && msg.method?.startsWith('browser.')) {
+          try {
+            const result = await handleLiveBrowserCommand(msg.method, msg.params || {});
+            bridgeWs.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }));
+          } catch (err) {
+            bridgeWs.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { message: err.message } }));
+          }
+        }
+      };
+
+      bridgeWs.onclose = () => {
+        dot.classList.remove('online');
+        status.textContent = '🟠 本地 Bridge 重连中...';
+        setTimeout(connectLocalBridge, 2500);
+      };
+    }
+
+    async function handleLiveBrowserCommand(method, params) {
+      const canvas = document.getElementById('live-page-canvas');
+      if (method === 'browser.inspect') {
+        const target = params.selector ? canvas.querySelector(params.selector) : canvas;
+        return {
+          activeSlug: currentSlug,
+          title: currentPageData?.title,
+          url: location.href,
+          found: Boolean(target),
+          outerHTML: target ? target.outerHTML.slice(0, 8000) : null,
+          slots: [...canvas.querySelectorAll('[data-agent-slot]')].map(el => el.dataset.agentSlot)
+        };
+      }
+      if (method === 'browser.eval') {
+        const fn = new Function('root', 'bridge', 'fetch', `return (async () => { ${params.code} })()`);
+        const output = await fn(canvas, window.agentBridge, window.agentBridge.scopedFetch);
+        showToast('⚡ 本地 Codex 已在当前页面执行实时脚本');
+        return { executed: true, output };
+      }
+      if (method === 'browser.switch_page') {
+        await selectPage(params.slug, false);
+        return { switchedTo: params.slug };
+      }
+      return { ok: true };
+    }
+
+    // ============================================================================
+    // 4. Chat Session History Management + Single-Flight + Stop Generation
+    // ============================================================================
+    function getDefaultWelcomeMessage() {
+      return {
+        role: 'assistant',
+        steps: [],
+        text: '👋 你好！这里直连你本机的 Codex 无头终端 (codex exec)，所有修改或新增均保存在本机 ./local-plugins/*.json 并实时注入页面。\n• 支持中文输入法候选词回车（不会误发送）\n• 支持随时点击「⏹ 停止生成」中断任务\n• 支持点击右上角「🕒 历史」查看并切换历史会话上下文'
+      };
+    }
+
+    async function loadChatSessionsFromBridge() {
+      try {
+        const r = await fetch(`${LOCAL_BRIDGE_HTTP}/chat-sessions`);
+        if (r.ok) {
+          const d = await r.json();
+          if (Array.isArray(d.sessions) && d.sessions.length > 0) {
+            chatSessions = d.sessions;
+            localStorage.setItem('codex_chat_sessions_backup', JSON.stringify(chatSessions));
+          }
+        }
+      } catch (_) {}
+      if (chatSessions.length === 0) {
+        try {
+          chatSessions = JSON.parse(localStorage.getItem('codex_chat_sessions_backup') || '[]');
+        } catch (_) { chatSessions = []; }
+      }
+      if (chatSessions.length === 0) {
+        createNewChatSession(false);
+      } else if (!currentSessionId) {
+        switchChatSession(chatSessions[0].id);
+      }
+      updateHistoryBadge();
+    }
+
+    function persistChatSessions() {
+      localStorage.setItem('codex_chat_sessions_backup', JSON.stringify(chatSessions));
+      updateHistoryBadge();
+      fetch(`${LOCAL_BRIDGE_HTTP}/chat-sessions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessions: chatSessions })
+      }).catch(() => {});
+    }
+
+    function updateHistoryBadge() {
+      document.getElementById('history-count').textContent = String(chatSessions.length);
+      renderHistoryDrawerList();
+    }
+
+    function getCurrentSessionObj() {
+      let s = chatSessions.find(x => x.id === currentSessionId);
+      if (!s) {
+        s = createNewChatSession(false);
+      }
+      return s;
+    }
+
+    function createNewChatSession(notify = true) {
+      if (isTaskRunning) {
+        showToast('⚠️ 请先停止当前正在运行的对话任务');
+        return;
+      }
+      const newSession = {
+        id: 'sess_' + Date.now(),
+        threadId: null,
+        title: '新对话',
+        updatedAt: new Date().toISOString(),
+        activeSlug: currentSlug,
+        messages: [getDefaultWelcomeMessage()]
+      };
+      chatSessions.unshift(newSession);
+      currentSessionId = newSession.id;
+      codexThreadId = null;
+      renderCurrentSessionMessages();
+      persistChatSessions();
+      document.getElementById('history-drawer').classList.remove('open');
+      if (notify) showToast('➕ 已开启新对话会话');
+      return newSession;
+    }
+
+    function switchChatSession(sessionId) {
+      if (isTaskRunning) {
+        showToast('⚠️ 当前任务运行中，请先停止后再切换会话');
+        return;
+      }
+      const target = chatSessions.find(x => x.id === sessionId);
+      if (!target) return;
+      currentSessionId = target.id;
+      codexThreadId = target.threadId || null;
+      renderCurrentSessionMessages();
+      updateHistoryBadge();
+      document.getElementById('history-drawer').classList.remove('open');
+    }
+
+    function deleteChatSession(sessionId, ev) {
+      ev.stopPropagation();
+      if (isTaskRunning && sessionId === currentSessionId) {
+        showToast('⚠️ 请先停止当前正在运行的任务');
+        return;
+      }
+      chatSessions = chatSessions.filter(x => x.id !== sessionId);
+      if (chatSessions.length === 0) {
+        createNewChatSession(false);
+      } else if (currentSessionId === sessionId) {
+        switchChatSession(chatSessions[0].id);
+      }
+      persistChatSessions();
+    }
+
+    function renderHistoryDrawerList() {
+      const listEl = document.getElementById('history-list');
+      if (!listEl) return;
+      listEl.innerHTML = '';
+      for (const s of chatSessions) {
+        const item = document.createElement('div');
+        item.className = 'history-item' + (s.id === currentSessionId ? ' active' : '');
+        const timeStr = s.updatedAt ? new Date(s.updatedAt).toLocaleString('zh-CN', { hour12: false }) : '';
+        const msgCount = Array.isArray(s.messages) ? s.messages.filter(m => m.role === 'user').length : 0;
+        const threadBadge = s.threadId ? `Thread: ${s.threadId.slice(0, 8)}` : '新线程';
+        item.innerHTML = `
+          <div class="history-item-top">
+            <span class="history-item-title">${s.title || '未命名会话'}</span>
+            <button class="history-del-btn" title="删除此会话">🗑️</button>
+          </div>
+          <div class="history-item-meta">
+            <span>💬 ${msgCount} 轮提问 · ${threadBadge}</span>
+            <span>${timeStr}</span>
+          </div>
+        `;
+        item.onclick = () => switchChatSession(s.id);
+        item.querySelector('.history-del-btn').onclick = (e) => deleteChatSession(s.id, e);
+        listEl.appendChild(item);
+      }
+    }
+
+    function renderCurrentSessionMessages() {
+      const s = getCurrentSessionObj();
+      const msgBox = document.getElementById('chat-messages');
+      msgBox.innerHTML = '';
+      document.getElementById('session-tag').textContent = s.threadId
+        ? `Session: ${s.threadId.slice(0, 8)}... (${s.title.slice(0, 12)})`
+        : `Session: ${s.title.slice(0, 14)}`;
+
+      for (const m of (s.messages || [])) {
+        if (m.role === 'user') {
+          const uDiv = document.createElement('div');
+          uDiv.className = 'msg user';
+          uDiv.textContent = m.text || '';
+          msgBox.appendChild(uDiv);
+        } else {
+          const aDiv = document.createElement('div');
+          aDiv.className = 'msg assistant';
+          const stepsBox = document.createElement('div');
+          stepsBox.className = 'msg-steps';
+          for (const st of (m.steps || [])) {
+            const pill = document.createElement('div');
+            pill.className = 'step-pill ' + (st.status || 'done');
+            pill.textContent = st.text;
+            stepsBox.appendChild(pill);
+          }
+          const textEl = document.createElement('div');
+          textEl.className = 'msg-text';
+          textEl.textContent = m.text || '';
+          aDiv.appendChild(stepsBox);
+          aDiv.appendChild(textEl);
+          msgBox.appendChild(aDiv);
+        }
+      }
+      msgBox.scrollTop = msgBox.scrollHeight;
+    }
+
+    function setTaskRunningState(running, reqId = null) {
+      isTaskRunning = running;
+      currentRunningRequestId = running ? reqId : null;
+      document.getElementById('btn-send').disabled = running;
+      document.getElementById('btn-stop-chat').classList.toggle('visible', running);
+    }
+
+    function stopCurrentChatTask() {
+      if (!isTaskRunning) return;
+      if (bridgeWs && bridgeWs.readyState === WebSocket.OPEN) {
+        bridgeWs.send(JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'stop_' + Date.now(),
+          method: 'codex.stop',
+          params: { requestId: currentRunningRequestId }
+        }));
+      }
+      fetch(`${LOCAL_BRIDGE_HTTP}/codex/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: currentRunningRequestId })
+      }).catch(() => {});
+    }
+
+    function handleCodexStreamEvent({ requestId, event }) {
+      const turnUI = activeTurnDomMap.get(requestId);
+      if (!turnUI) return;
+      const sess = getCurrentSessionObj();
+
+      if (event.type === 'process.busy') {
+        turnUI.textEl.textContent = `⚠️ ${event.message}`;
+        setTaskRunningState(false);
+        return;
+      }
+
+      if (event.type === 'thread.started' && event.thread_id) {
+        codexThreadId = event.thread_id;
+        sess.threadId = codexThreadId;
+        document.getElementById('session-tag').textContent = `Session: ${codexThreadId.slice(0, 8)}...`;
+        persistChatSessions();
+      }
+
+      if (event.type === 'item.started' || event.type === 'item.updated' || event.type === 'item.completed') {
+        const item = event.item || {};
+        if (item.type === 'mcp_tool_call' || item.type === 'command_execution' || item.type === 'reasoning') {
+          let pill = turnUI.stepsBox.querySelector(`[data-item-id="${item.id}"]`);
+          if (!pill) {
+            pill = document.createElement('div');
+            pill.className = 'step-pill';
+            pill.dataset.itemId = item.id;
+            turnUI.stepsBox.appendChild(pill);
+          }
+          if (item.type === 'mcp_tool_call') {
+            pill.textContent = `🔧 MCP 工具调用: ${item.server || 'page_studio'}.${item.tool || item.name || ''}`;
+          } else if (item.type === 'command_execution') {
+            pill.textContent = `💻 终端命令: ${item.command || ''}`;
+          } else {
+            pill.textContent = `🧠 思考中: ${item.summary || item.text || '...'}`;
+          }
+          if (event.type === 'item.completed') pill.classList.add('done');
+
+          // Sync steps to session record
+          turnUI.msgRecord.steps = [...turnUI.stepsBox.querySelectorAll('.step-pill')].map(el => ({
+            text: el.textContent,
+            status: el.classList.contains('done') ? 'done' : ''
+          }));
+        } else if (item.type === 'agent_message') {
+          turnUI.textEl.textContent = item.text || '';
+          turnUI.msgRecord.text = item.text || '';
+        }
+      }
+
+      if (event.type === 'process.stopped') {
+        setTaskRunningState(false);
+        const stopPill = document.createElement('div');
+        stopPill.className = 'step-pill stopped';
+        stopPill.textContent = '⏹ 已由用户手动停止任务执行';
+        turnUI.stepsBox.appendChild(stopPill);
+        if (turnUI.textEl.textContent.startsWith('⏳')) {
+          turnUI.textEl.textContent = '⏹ 任务已手动终止。';
+        }
+        turnUI.msgRecord.text = turnUI.textEl.textContent;
+        turnUI.msgRecord.steps = [...turnUI.stepsBox.querySelectorAll('.step-pill')].map(el => ({
+          text: el.textContent,
+          status: el.classList.contains('stopped') ? 'stopped' : 'done'
+        }));
+        persistChatSessions();
+        showToast('⏹ 已停止当前 AI 生成任务');
+      }
+
+      if (event.type === 'turn.completed' || event.type === 'process.done') {
+        setTaskRunningState(false);
+        if (!turnUI.textEl.textContent.trim() || turnUI.textEl.textContent.startsWith('⏳')) {
+          turnUI.textEl.textContent = '✅ 操作已完成。';
+        }
+        turnUI.msgRecord.text = turnUI.textEl.textContent;
+        sess.updatedAt = new Date().toISOString();
+        persistChatSessions();
+      }
+
+      if (event.type === 'turn.failed' || event.type === 'error') {
+        setTaskRunningState(false);
+        const errMsg = event.error?.message || event.message || '执行出错';
+        turnUI.textEl.textContent += `\n⚠️ ${errMsg}`;
+        turnUI.msgRecord.text = turnUI.textEl.textContent;
+        persistChatSessions();
+      }
+
+      const msgBox = document.getElementById('chat-messages');
+      msgBox.scrollTop = msgBox.scrollHeight;
+    }
+
+    function sendChatPrompt(rawPrompt) {
+      if (isTaskRunning) {
+        showToast('⚠️ 当前有一个对话任务正在执行，同时只能发送一个！可点击「⏹ 停止生成」中断。');
+        return;
+      }
+      const prompt = (rawPrompt ?? document.getElementById('chat-input').value).trim();
+      if (!prompt) return;
+
+      if (isChatCollapsed) {
+        toggleChatPanel(true);
+      }
+
+      if (!bridgeWs || bridgeWs.readyState !== WebSocket.OPEN) {
+        alert('本地 Codex Bridge Daemon 未连接！请确保本机 127.0.0.1:19820 正在运行。');
+        return;
+      }
+
+      document.getElementById('chat-input').value = '';
+      const requestId = 'req_' + Date.now();
+      setTaskRunningState(true, requestId);
+
+      const sess = getCurrentSessionObj();
+      if (!sess.title || sess.title === '新对话') {
+        sess.title = prompt.slice(0, 28);
+      }
+      sess.updatedAt = new Date().toISOString();
+
+      const msgBox = document.getElementById('chat-messages');
+      const userDiv = document.createElement('div');
+      userDiv.className = 'msg user';
+      userDiv.textContent = prompt;
+      msgBox.appendChild(userDiv);
+      sess.messages.push({ role: 'user', text: prompt, timestamp: Date.now() });
+
+      const asstDiv = document.createElement('div');
+      asstDiv.className = 'msg assistant';
+      const stepsBox = document.createElement('div');
+      stepsBox.className = 'msg-steps';
+      const textEl = document.createElement('div');
+      textEl.className = 'msg-text';
+      textEl.textContent = '⏳ 正在唤醒本地 Codex 执行任务...';
+      asstDiv.appendChild(stepsBox);
+      asstDiv.appendChild(textEl);
+      msgBox.appendChild(asstDiv);
+      msgBox.scrollTop = msgBox.scrollHeight;
+
+      const msgRecord = { role: 'assistant', steps: [], text: textEl.textContent, timestamp: Date.now() };
+      sess.messages.push(msgRecord);
+      persistChatSessions();
+
+      activeTurnDomMap.set(requestId, { asstDiv, stepsBox, textEl, msgRecord });
+
+      bridgeWs.send(JSON.stringify({
+        jsonrpc: '2.0',
+        id: requestId,
+        method: 'codex.run',
+        params: {
+          prompt,
+          threadId: codexThreadId,
+          activeSlug: currentSlug,
+          activePageTitle: currentPageData?.title || currentSlug
+        }
+      }));
+    }
+
+    // Expose global bridge for injected plugins/pages
+    window.agentBridge = {
+      sendChatPrompt,
+      getActivePage: () => currentPageData,
+      selectPage,
+      getPageData: () => ({
+        userId: currentUserId,
+        activeSlug: currentSlug,
+        pageTitle: currentPageData?.title,
+        hostData: hostBackendData,
+        localPluginSlugs: [...localPluginsMap.keys()]
+      }),
+      callBackendApi: async (apiPath = '/host/data', options = {}) => {
+        const cleanPath = apiPath.startsWith('/api') ? apiPath.slice(4) : apiPath;
+        const res = await fetch(`${API_BASE}${cleanPath}`, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': currentUserId,
+            ...(options.headers || {})
+          }
+        });
+        return res.json();
+      },
+      fetchProxy: async (url, options = {}) => {
+        const res = await window.fetch(`${LOCAL_BRIDGE_HTTP}/proxy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            method: options.method || 'GET',
+            headers: options.headers || {},
+            body: options.body,
+            charset: options.charset || 'utf-8'
+          })
+        });
+        return res.json();
+      },
+      scopedFetch: async (input, init = {}) => {
+        const targetUrl = typeof input === 'string' ? input : (input?.url || String(input));
+        try {
+          const parsed = new URL(targetUrl, location.origin);
+          const isSameOrigin = parsed.origin === location.origin;
+          const isLocalBridge = parsed.origin === LOCAL_BRIDGE_HTTP;
+          if (!isSameOrigin && !isLocalBridge) {
+            const proxyRes = await window.agentBridge.fetchProxy(parsed.toString(), {
+              method: init.method || 'GET',
+              headers: init.headers || {},
+              body: init.body,
+              charset: init.charset || 'utf-8'
+            });
+            const bodyStr = typeof proxyRes.data === 'string' ? proxyRes.data : JSON.stringify(proxyRes.data ?? {});
+            return new Response(bodyStr, {
+              status: proxyRes.status || (proxyRes.ok ? 200 : 502),
+              headers: { 'Content-Type': proxyRes.contentType || 'application/json' }
+            });
+          }
+        } catch (_) {}
+        return window.fetch(input, init);
+      }
+    };
+
+    // Multi-User Switcher & Cloud Plugin Sync
+    document.getElementById('user-select').onchange = async (e) => {
+      currentUserId = e.target.value;
+      localStorage.setItem('codex_studio_user_id', currentUserId);
+      showToast(`👤 已切换登录租户为: ${currentUserId}`);
+      await pullUserPluginsFromCloud(false);
+    };
+
+    async function pushUserPluginsToCloud() {
+      const plugins = [...localPluginsMap.values()];
+      const res = await fetch(`${API_BASE}/user/plugins`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-User-Id': currentUserId },
+        body: JSON.stringify({ userId: currentUserId, plugins })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast(`☁️ 已将 ${data.pluginCount} 个本地插件同步备份至用户 [${currentUserId}] 的云端槽位！`);
+      }
+    }
+
+    async function pullUserPluginsFromCloud(syncToLocalBridge = true) {
+      const res = await fetch(`${API_BASE}/user/plugins?userId=${encodeURIComponent(currentUserId)}`);
+      const data = await res.json();
+      const cloudPlugins = data.plugins || [];
+      if (cloudPlugins.length > 0 || currentUserId !== 'default') {
+        localPluginsMap.clear();
+        for (const p of cloudPlugins) localPluginsMap.set(p.slug, p);
+        if (syncToLocalBridge && cloudPlugins.length > 0) {
+          fetch(`${LOCAL_BRIDGE_HTTP}/local-plugins`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugins: cloudPlugins })
+          }).catch(() => {});
+        }
+        renderSidebar();
+        await selectPage(localPluginsMap.has(currentSlug) ? currentSlug : 'home', false);
+        showToast(`📥 已同步用户 [${currentUserId}] 的 ${cloudPlugins.length} 个专属插件`);
+      }
+    }
+
+    document.getElementById('btn-sync-push').onclick = pushUserPluginsToCloud;
+    document.getElementById('btn-sync-pull').onclick = () => pullUserPluginsFromCloud(true);
+
+    // Chat Input Events (with CJK IME Composition Guard!)
+    const chatInputEl = document.getElementById('chat-input');
+    chatInputEl.addEventListener('compositionstart', () => { isImeComposing = true; });
+    chatInputEl.addEventListener('compositionend', () => {
+      // Slight delay for Safari where keydown fires right after compositionend
+      setTimeout(() => { isImeComposing = false; }, 30);
+    });
+    chatInputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.isComposing || isImeComposing || e.keyCode === 229) {
+          return; // Do NOT submit when confirming Chinese IME candidate word!
+        }
+        e.preventDefault();
+        sendChatPrompt();
+      }
+    });
+
+    document.getElementById('btn-send').onclick = () => sendChatPrompt();
+    document.getElementById('btn-stop-chat').onclick = stopCurrentChatTask;
+    document.getElementById('btn-reset-chat').onclick = () => createNewChatSession(true);
+    document.getElementById('btn-history-sessions').onclick = () => {
+      renderHistoryDrawerList();
+      document.getElementById('history-drawer').classList.toggle('open');
+    };
+    document.getElementById('btn-close-history').onclick = () => {
+      document.getElementById('history-drawer').classList.remove('open');
+    };
+
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.onclick = () => sendChatPrompt(chip.dataset.prompt);
+    });
+
+    // Create New Local Plugin Page
+    document.getElementById('btn-create-blank').onclick = async () => {
+      const slug = prompt('请输入新本地插件页面的英文标识 (slug，例如 stock-board):', 'plugin-' + Math.floor(Math.random() * 900 + 100));
+      if (!slug) return;
+      const title = prompt('请输入中文标题:', '新建本地插件页') || slug;
+      const newPlugin = {
+        slug,
+        kind: 'custom-page',
+        title,
+        icon: '🔌',
+        html: `<div style="padding:28px;background:#111827;border:1px solid #1e293b;border-radius:14px;"><h2>🔌 ${title}</h2><p style="color:#94a3b8;margin-top:10px;">这是一个保存在本机 <code>./local-plugins/${slug}.json</code> 的本地插件页面。你可以在右侧聊天框或点击顶部「源码与实时预览 (IDE)」直接编写代码！</p><div data-agent-slot="${slug}-slot" style="margin-top:20px;padding:20px;border:1px dashed #334155;border-radius:10px;color:#64748b;">插槽区域 <code>[data-agent-slot="${slug}-slot"]</code></div></div>`,
+        css: '',
+        js: '',
+        switchActive: true
+      };
+      try {
+        const r = await fetch(`${LOCAL_BRIDGE_HTTP}/local-plugins`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newPlugin)
+        });
+        if (r.ok) {
+          showToast(`✨ 已在本机创建插件页面 /${slug}`);
+          return;
+        }
+      } catch (_) {}
+      localPluginsMap.set(slug, newPlugin);
+      renderSidebar();
+      await selectPage(slug, false);
+    };
+
+    // ============================================================================
+    // 5. Mature Multi-Tab Monaco Editor + Live Split Preview Workbench
+    // ============================================================================
+    function initMonacoIfNeeded() {
+      if (monacoEditorInstance || typeof window.require !== 'function') return;
+      try {
+        window.require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.47.0/min/vs' } });
+        window.require(['vs/editor/editor.main'], () => {
+          monacoModels = {
+            html: monaco.editor.createModel(editorDraft.html, 'html'),
+            css: monaco.editor.createModel(editorDraft.css, 'css'),
+            js: monaco.editor.createModel(editorDraft.js, 'javascript'),
+            json: monaco.editor.createModel(editorDraft.json, 'json')
+          };
+
+          monacoEditorInstance = monaco.editor.create(document.getElementById('monaco-host'), {
+            model: monacoModels[currentIdeTab],
+            theme: 'vs-dark',
+            automaticLayout: true,
+            fontSize: 13,
+            fontFamily: '"JetBrains Mono", Menlo, Consolas, monospace',
+            minimap: { enabled: true },
+            scrollBeyondLastLine: false,
+            wordWrap: 'on',
+            tabSize: 2,
+            formatOnPaste: true
+          });
+
+          // Listen for changes in any model
+          Object.entries(monacoModels).forEach(([tabKey, model]) => {
+            model.onDidChangeContent(() => {
+              const val = model.getValue();
+              editorDraft[tabKey] = val;
+              if (tabKey === 'json') {
+                try {
+                  const parsed = JSON.parse(val);
+                  if (typeof parsed.html === 'string') editorDraft.html = parsed.html;
+                  if (typeof parsed.css === 'string') editorDraft.css = parsed.css;
+                  if (typeof parsed.js === 'string') editorDraft.js = parsed.js;
+                  if (parsed.title) document.getElementById('edit-title').value = parsed.title;
+                  if (parsed.icon) document.getElementById('edit-icon').value = parsed.icon;
+                } catch (_) {}
+              } else {
+                syncJsonModelFromParts();
+              }
+              scheduleLivePreview();
+            });
+          });
+
+          // Add Cmd/Ctrl + S shortcut inside Monaco
+          monacoEditorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+            saveSourceFromIde();
+          });
+        });
+      } catch (e) {
+        document.getElementById('monaco-host').style.display = 'none';
+        document.getElementById('fallback-code-textarea').style.display = 'block';
+      }
+    }
+
+    function buildFullManifestJsonString() {
+      const manifest = {
+        slug: currentPageData?.slug || currentSlug,
+        kind: currentPageData?.kind || 'custom-page',
+        targetPage: currentPageData?.targetPage || null,
+        targetSelector: currentPageData?.targetSelector || null,
+        title: document.getElementById('edit-title').value || currentPageData?.title || currentSlug,
+        icon: document.getElementById('edit-icon').value || currentPageData?.icon || '🔌',
+        html: editorDraft.html,
+        css: editorDraft.css,
+        js: editorDraft.js
+      };
+      return JSON.stringify(manifest, null, 2);
+    }
+
+    function syncJsonModelFromParts() {
+      editorDraft.json = buildFullManifestJsonString();
+      if (monacoModels.json && currentIdeTab !== 'json') {
+        monacoModels.json.setValue(editorDraft.json);
+      }
+    }
+
+    function switchIdeTab(tabKey) {
+      currentIdeTab = tabKey;
+      document.querySelectorAll('.ide-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabKey);
+      });
+      if (tabKey === 'json') {
+        editorDraft.json = buildFullManifestJsonString();
+        if (monacoModels.json) monacoModels.json.setValue(editorDraft.json);
+      } else if (monacoModels[tabKey] && monacoModels[tabKey].getValue() !== editorDraft[tabKey]) {
+        monacoModels[tabKey].setValue(editorDraft[tabKey]);
+      }
+
+      if (monacoEditorInstance && monacoModels[tabKey]) {
+        monacoEditorInstance.setModel(monacoModels[tabKey]);
+        monacoEditorInstance.focus();
+      } else {
+        const fb = document.getElementById('fallback-code-textarea');
+        fb.value = editorDraft[tabKey] || '';
+      }
+    }
+
+    function renderIdeLivePreview() {
+      if (typeof previewCleanupFn === 'function') {
+        try { previewCleanupFn(); } catch (_) {}
+        previewCleanupFn = null;
+      }
+      const statusEl = document.getElementById('preview-status');
+      document.getElementById('ide-preview-style').textContent = editorDraft.css || '';
+      const previewCanvas = document.getElementById('ide-preview-canvas');
+      previewCanvas.innerHTML = editorDraft.html || '';
+
+      if (editorDraft.js && editorDraft.js.trim()) {
+        try {
+          const fn = new Function('root', 'bridge', 'fetch', editorDraft.js);
+          previewCleanupFn = fn(previewCanvas, window.agentBridge, window.agentBridge.scopedFetch);
+          statusEl.style.color = 'var(--green)';
+          statusEl.textContent = '✅ 预览已同步 (' + new Date().toLocaleTimeString('zh-CN', { hour12: false }) + ')';
+        } catch (err) {
+          statusEl.style.color = 'var(--rose)';
+          statusEl.textContent = '⚠️ JS 错误: ' + err.message;
+        }
+      } else {
+        statusEl.style.color = 'var(--green)';
+        statusEl.textContent = '✅ 静态预览已更新';
+      }
+    }
+
+    function scheduleLivePreview() {
+      if (!document.getElementById('chk-auto-preview').checked) return;
+      clearTimeout(previewDebounceTimer);
+      previewDebounceTimer = setTimeout(renderIdeLivePreview, 320);
+    }
+
+    document.getElementById('btn-edit-source').onclick = () => {
+      if (!currentPageData) return;
+      document.getElementById('modal-slug').textContent = `/${currentPageData.slug}`;
+      document.getElementById('edit-title').value = currentPageData.title || '';
+      document.getElementById('edit-icon').value = currentPageData.icon || '🔌';
+
+      editorDraft = {
+        html: currentPageData.html || '',
+        css: currentPageData.css || '',
+        js: currentPageData.js || '',
+        json: ''
+      };
+      editorDraft.json = buildFullManifestJsonString();
+
+      document.getElementById('editor-modal').classList.add('open');
+      initMonacoIfNeeded();
+
+      if (monacoEditorInstance && monacoModels.html) {
+        monacoModels.html.setValue(editorDraft.html);
+        monacoModels.css.setValue(editorDraft.css);
+        monacoModels.js.setValue(editorDraft.js);
+        monacoModels.json.setValue(editorDraft.json);
+        switchIdeTab(currentIdeTab);
+        setTimeout(() => monacoEditorInstance.layout(), 80);
+      } else {
+        const fb = document.getElementById('fallback-code-textarea');
+        fb.style.display = 'block';
+        fb.value = editorDraft[currentIdeTab];
+      }
+
+      renderIdeLivePreview();
+    };
+
+    document.getElementById('fallback-code-textarea').addEventListener('input', (e) => {
+      editorDraft[currentIdeTab] = e.target.value;
+      scheduleLivePreview();
+    });
+
+    document.querySelectorAll('.ide-tab').forEach(btn => {
+      btn.onclick = () => switchIdeTab(btn.dataset.tab);
+    });
+
+    document.querySelectorAll('[data-layout]').forEach(btn => {
+      btn.onclick = () => {
+        const mode = btn.dataset.layout;
+        document.querySelectorAll('[data-layout]').forEach(b => b.classList.toggle('active-toggle', b === btn));
+        const bodyEl = document.getElementById('ide-body');
+        bodyEl.className = 'ide-body' + (mode === 'code' ? ' mode-code' : mode === 'preview' ? ' mode-preview' : '');
+        if (monacoEditorInstance) setTimeout(() => monacoEditorInstance.layout(), 60);
+      };
+    });
+
+    document.getElementById('btn-run-preview').onclick = renderIdeLivePreview;
+
+    function closeIdeModal() {
+      if (typeof previewCleanupFn === 'function') {
+        try { previewCleanupFn(); } catch (_) {}
+        previewCleanupFn = null;
+      }
+      document.getElementById('ide-preview-style').textContent = '';
+      document.getElementById('ide-preview-canvas').innerHTML = '';
+      document.getElementById('editor-modal').classList.remove('open');
+    }
+    document.getElementById('btn-close-modal').onclick = closeIdeModal;
+
+    async function saveSourceFromIde() {
+      if (!currentPageData) return;
+      const slug = currentPageData.slug;
+      const payload = {
+        slug,
+        kind: currentPageData.kind || 'custom-page',
+        targetPage: currentPageData.targetPage || null,
+        targetSelector: currentPageData.targetSelector || null,
+        title: document.getElementById('edit-title').value || slug,
+        icon: document.getElementById('edit-icon').value || '🔌',
+        html: editorDraft.html,
+        css: editorDraft.css,
+        js: editorDraft.js,
+        switchActive: true
+      };
+
+      // Priority 1: Save to Local Bridge (`local-plugins/<slug>.json`)
+      try {
+        const res = await fetch(`${LOCAL_BRIDGE_HTTP}/local-plugins/${encodeURIComponent(slug)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const d = await res.json();
+          if (d.plugin) {
+            localPluginsMap.set(slug, d.plugin);
+            mountPageToCanvas(d.plugin);
+            renderSidebar();
+          }
+          showToast(`💾 已保存到本机 local-plugins/${slug}.json 并热注入页面！`);
+          closeIdeModal();
+          return;
+        }
+      } catch (_) {}
+
+      // Fallback: Save in browser localPluginsMap
+      localPluginsMap.set(slug, payload);
+      localStorage.setItem(`codex_user_plugins_${currentUserId}`, JSON.stringify([...localPluginsMap.values()]));
+      mountPageToCanvas(payload);
+      renderSidebar();
+      showToast(`💾 已保存插件 /${slug} 到本地缓存`);
+      closeIdeModal();
+    }
+
+    document.getElementById('btn-save-source').onclick = saveSourceFromIde;
+
+    // Rollback (supports both Local Bridge plugin revisions & Server revisions)
+    document.getElementById('btn-rollback').onclick = async () => {
+      if (!currentPageData) return;
+      const slug = currentPageData.slug;
+      if (localPluginsMap.has(slug)) {
+        try {
+          const r = await fetch(`${LOCAL_BRIDGE_HTTP}/local-plugins/${encodeURIComponent(slug)}/rollback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+          });
+          const d = await r.json();
+          if (!r.ok) {
+            alert(d.error || '当前本地插件没有可回滚的历史版本');
+            return;
+          }
+          showToast(`⏪ 已回滚本地插件 /${slug} 到上一版本`);
+          return;
+        } catch (_) {}
+      }
+      const res = await fetch(`${API_BASE}/pages/${encodeURIComponent(slug)}/rollback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || '没有可回滚的历史版本');
+      }
+    };
+
+    document.getElementById('btn-delete-page').onclick = async () => {
+      if (!currentPageData || currentPageData.slug === 'home') return;
+      const slug = currentPageData.slug;
+      if (!confirm(`确定要删除本地插件页面「${currentPageData.title} (/${slug})」吗？`)) return;
+      try {
+        await fetch(`${LOCAL_BRIDGE_HTTP}/local-plugins/${encodeURIComponent(slug)}`, { method: 'DELETE' });
+      } catch (_) {}
+      localPluginsMap.delete(slug);
+      localStorage.setItem(`codex_user_plugins_${currentUserId}`, JSON.stringify([...localPluginsMap.values()]));
+      renderSidebar();
+      await selectPage('home', false);
+      showToast(`🗑️ 已删除插件 /${slug}`);
+    };
+
+    // ============================================================================
+    // 6. BYOA Local Agent Setup Modal (Prompt for Agent + Bundle Download)
+    // ============================================================================
+    const SITE_PUBLIC_BASE = location.origin + (location.pathname.startsWith('/codex-studio') ? '/codex-studio' : '');
+
+    function openAgentSetupModal() {
+      const promptText = `请帮我安装并启动当前网站 (${SITE_PUBLIC_BASE}) 的本地 Agent 桥接服务 (Local Bridge) 与 MCP 插件：
+
+1. 请先读取该网站的线上 Agent 安装规范：
+   curl -fsSL ${SITE_PUBLIC_BASE}/agent-setup-guide.md
+
+2. 在我本机创建独立工作目录 ~/.byoa-web-bridge，下载并解压该网站提供的零依赖桥接安装包：
+   mkdir -p ~/.byoa-web-bridge && curl -fsSL ${SITE_PUBLIC_BASE}/bridge-bundle.tar.gz | tar -xz -C ~/.byoa-web-bridge
+
+3. 将 ~/.byoa-web-bridge/mcp-server.mjs 注册到我的本地 Agent MCP 配置中（MCP 服务名设为 page_studio，环境变量 CODEX_STUDIO_LOCAL_BRIDGE="http://127.0.0.1:19820"，CODEX_STUDIO_REMOTE_API="${SITE_PUBLIC_BASE}/api"）。
+
+4. 在后台启动本地桥接守护进程：
+   nohup node ~/.byoa-web-bridge/bridge-daemon.mjs > ~/.byoa-web-bridge/bridge.log 2>&1 &
+   并请求 http://127.0.0.1:19820/health 确认本地桥接服务已启动成功。`;
+
+      const shellCmd = `curl -fsSL ${SITE_PUBLIC_BASE}/install.sh | bash`;
+
+      document.getElementById('agent-setup-prompt-box').textContent = promptText;
+      document.getElementById('agent-setup-shell-box').textContent = shellCmd;
+      document.getElementById('link-download-bundle').href = `${SITE_PUBLIC_BASE}/bridge-bundle.tar.gz`;
+      document.getElementById('link-view-guide').href = `${SITE_PUBLIC_BASE}/agent-setup-guide.md`;
+      document.getElementById('agent-setup-modal').classList.add('open');
+    }
+
+    document.getElementById('btn-agent-setup').onclick = openAgentSetupModal;
+    document.getElementById('bridge-conn-pill').onclick = openAgentSetupModal;
+    document.getElementById('btn-close-setup-modal').onclick = () => {
+      document.getElementById('agent-setup-modal').classList.remove('open');
+    };
+    document.getElementById('btn-copy-agent-prompt').onclick = async () => {
+      const txt = document.getElementById('agent-setup-prompt-box').textContent;
+      await navigator.clipboard.writeText(txt);
+      showToast('📋 已复制 Agent 安装 Prompt！直接粘贴给你的本地 Codex / Claude Code 即可自动完成安装');
+    };
+    document.getElementById('btn-copy-shell-cmd').onclick = async () => {
+      const txt = document.getElementById('agent-setup-shell-box').textContent;
+      await navigator.clipboard.writeText(txt);
+      showToast('📋 已复制终端一键安装命令！');
+    };
+
+    // Init
+    (async () => {
+      await loadPagesList();
+      await selectPage(currentSlug, false);
+      connectServerSSE();
+      connectLocalBridge();
+      loadChatSessionsFromBridge();
+    })();
+  </script>
+</body>
+</html>

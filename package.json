@@ -1,0 +1,16 @@
+{
+  "name": "byoa-web-agent-bridge",
+  "version": "2.0.0",
+  "description": "BYOA (Bring Your Own Agent) Local-First Web Plugin Injection Bridge, MCP Server, and Multi-Tenant Host Platform",
+  "type": "module",
+  "scripts": {
+    "start": "node bridge-daemon.mjs",
+    "bridge": "node bridge-daemon.mjs",
+    "mcp": "node mcp-server.mjs",
+    "server": "node server-app/server.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

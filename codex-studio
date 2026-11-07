@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+if [ -x "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex" ]; then
+  exec "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex" "$@"
+else
+  exec codex "$@"
+fi
