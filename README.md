@@ -13,14 +13,15 @@
 
 <a id="screenshots"></a>
 
-## 🎬 Interactive Scenario Showcase: Why BYOA? / 场景动态演示：为什么要用用户自己的本地 Agent？
+## 🎬 Voiced Motion Video Showcase: Why BYOA? / 配音动态示意视频：为什么要用用户自己的本地 Agent？
 
-> **5-Act Schematic Animation**: Watch how a user stays inside their familiar **Broker A** website, invokes their own **Local Sovereign Agent** (`127.0.0.1:19820` paired via `#bridge_token`), aggregates accounts across **Bank B (`Skill`)** + **Broker C (`MCP`)** + **Local Tax Files** entirely on `localhost` (**0 bytes uploaded to Broker A's cloud**), and hot-injects a cross-institution wealth & tax-loss harvesting dashboard straight into Broker A's webpage.  
-> **五幕交互式原理演示**：展示为什么“每个网站自建云端 AI”会陷入低配模型与数据孤岛，以及 BYOA 如何把 **用户自己的本地主权 Agent** 放在核心位置——当用户在高频使用的 **券商 A 网站** 发起指令时，本地 Agent 自动通过 `MCP / Skills` 与 `bridge.fetchProxy` 跨平台拉取 **银行 B、券商 C 与本机报税表**，在 **100% 本地完成跨机构财务规划与税务抵扣计算（0 字节外流至券商 A 服务器）**，并毫秒级将定制看板注入回券商 A 页面。
+> **🔊 60-Second Voiced Schematic Video (With Chinese Neural Voiceover & Subtitles)**:  
+> Watch how a user avoids siloed, downgraded website cloud AIs and instead puts their **own Local Sovereign Agent (`127.0.0.1:19820`)** at the center—plugging in **Broker A (`MCP`)**, **Bank B (`Skill`)**, and **Broker C (`Proxy`)**, computing cross-institution wealth & tax-loss harvesting plans **100% locally (0 bytes uploaded to Broker A's cloud)**, and dynamically injecting the visual dashboard straight into Broker A's webpage.  
+> **🔊 60 秒全流程配音动态示意视频（非 PPT 堆砌文字，采用实时节点连线与数据流动画 + 语音旁白）**：直观演示为什么“每个网站自建云端小模型”会陷入重复调教与数据孤岛，以及 BYOA 如何把 **用户自己的本地 Agent** 放在中心位置，在熟悉的券商 A 网页内发令、本机拉取银行 B 与券商 C 算清财务与报税方案、并实时注入回原网页！
 >
-> 👉 **[🎞️ Download HD MP4 Video (`docs/images/byoa-story-demo.mp4`)](docs/images/byoa-story-demo.mp4)** · **[🕹️ Open Interactive HTML Storyboard (`docs/byoa-interactive-story.html`)](docs/byoa-interactive-story.html)**
+> 👉 **[🎬 Click to Watch / Download Full HD Voiced Video (`docs/images/byoa-story-demo.mp4`, with Audio 🔊)](docs/images/byoa-story-demo.mp4)**
 
-![BYOA 5-Act Interactive Scenario Showcase](docs/images/byoa-story-demo.gif)
+[![Watch BYOA Voiced Schematic Video](docs/images/byoa-video-cover.png)](docs/images/byoa-story-demo.mp4)
 
 ---
 
