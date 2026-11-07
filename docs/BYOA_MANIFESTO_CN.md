@@ -139,3 +139,36 @@
    - `bridge-daemon.mjs` 启动时自动生成 256-bit 随机 Token 存入 `~/.byoa-web-bridge/.bridge-token`（权限 `0600`），所有 HTTP（`X-Bridge-Token`）与 WebSocket（`?token=`）请求均通过 `crypto.timingSafeEqual` 严格校验，防止本机其他未授权进程或恶意网页跨站调用；
    - 用户点击 Agent 输出的 `https://your-web-app.example.com/#home&bridge_token=<TOKEN>` 链接时，根据 **RFC 3986** 规范，`#` 号后的 Fragment 仅在浏览器本地内存解析，**绝不会随 HTTP 请求发送到远端服务器**；
    - 前端提取 `bridge_token` 存入 `localStorage` 后，立即调用 `history.replaceState` 将 Token 从地址栏抹除，顶部状态变为 **「Bridge 已连接」**，彻底实现安全、无感的双向桥接闭环。
+
+---
+
+## 六、 如果我想基于自己现有的网站开发这套功能，应该怎么跟编程 Agent 说？（纯口语化需求模板）
+
+当你想把这套 **BYOA（让用户接入自己的本地 Agent）** 能力加到你现有的任意网站上时，你完全不需要跟 Agent 讲底层技术细节，只需要把下面这段**口语化的产品需求**直接发给你的编程 Agent 即可：
+
+### 💬 中文口语化需求 Prompt（直接复制发给你的 Agent）
+
+> “我现在有一个已经在线运行的网站，我想给它加上一套**‘让用户接入自己本地 AI Agent’**的能力，而不是在网站后台自己接个大模型做普通客服。具体我想实现这几个效果：
+>
+> 1. **在网页里直接跟自己电脑上的 Agent 对话，也能在本地 Agent 里反过来操作网页**：
+>    用户打开我的网站后，右边有一个可以随时收起和展开的 AI 对话框（注意处理好中文输入法按回车选词时别误发送、支持随时点击停止生成、同时只能跑一个任务、还能查看和切换历史对话）。用户在这里发消息，实际调用的是他自己电脑上的本地 Agent（比如 Claude Code 或 Codex）；反过来，用户在自己电脑终端的 Agent 里下指令，也能直接读取我当前网页的内容、或者直接操作我的网页。
+> 2. **一键引导用户的本地 Agent 自动安装连接工具**：
+>    在网站顶部放一个‘接入本地 Agent’的按钮。用户点开就能直接复制一段话发给他自己的本地 Agent，让他本地的 Agent 自动从我网站下载配套的桥接服务和工具插件并启动。为了安全，本地服务必须带访问密钥（支持点击网页链接里 `#` 号后面的参数自动完成配对，这样密钥不会发到我的服务器），防止用户电脑上别的程序或别的网页乱调。
+> 3. **用户让 Agent 改页面或加新功能，代码都保存在用户本地、通过注入显示，绝不直接改我的服务器代码**：
+>    无论是用户在老页面上让 Agent 加个小组件（比如加个天气、数据卡片），还是让 Agent 新做一个完整的工具页（比如计算器、看板、小游戏），这些生成的代码都保存在用户自己电脑本地，通过本地连接实时注入到我的网页里显示出来，还能在左侧导航栏（支持折叠成大图标）切换，或者用独立链接在新窗口打开。同时网页里要提供一个带多标签（HTML/CSS/JS）和实时分栏预览的成熟代码编辑器，方便直接看源码、预览和回滚版本。
+> 4. **支持跨平台查数据（本地中转免跨域）和多用户云端同步备份**：
+>    如果 Agent 给用户写的页面代码需要去调外部其他网站的接口（比如查股票行情、或者查其他平台的数据），直接通过用户本地的连接服务中转请求，绕过浏览器的跨域限制，而且敏感数据全在用户本地处理、不经过我的服务器。另外要支持多用户登录，用户本地做好的这些扩展页面和插件，可以作为纯静态数据同步备份到他自己的云端账号下，换台电脑登录就能拉下来继续用，但我的服务器绝对不能执行任何用户上传的代码。”
+
+### 💬 English Conversational Requirement Prompt (Copy & Paste to Your Agent)
+
+> "I have an existing web application, and instead of building a standard cloud chatbot on my backend, I want to let users **bring and connect their own local AI Agent** (like Claude Code or Codex) to my website. Here is what I want from a user experience perspective:
+>
+> 1. **Two-way interaction between my web UI and the user's local Agent**:
+>    Add a collapsible AI chat panel on the right side of my website (make sure pressing Enter during CJK IME composition doesn't accidentally submit, allow stopping an active generation, enforce one task at a time, and let users switch between historical chat sessions). When a user chats here, it should drive the headless Agent on their own computer. Conversely, when the user talks to their local Agent in their terminal, the Agent should be able to inspect and manipulate the live webpage.
+> 2. **One-click onboarding prompt for the user's Agent + token security**:
+>    Put a 'Connect Local Agent' button in the top bar. Clicking it should give the user a ready-to-copy prompt they can paste straight into their local Agent, instructing their Agent to download the bridge/MCP bundle hosted on my site and start it up. For security, the local bridge service must require a secret token, and support pairing via a `#` URL fragment link so the token is never sent to my server.
+> 3. **All Agent-created pages and modifications stay local and render via runtime injection (never modify my server code)**:
+>    Whether the user asks their Agent to add a widget to an existing page or build a brand-new tool page, keep all generated code on the user's local machine and inject it into the webpage in real time. Let users switch pages via a left sidebar (which can collapse into large icons), open local pages in standalone URLs, and inspect/edit the code using a mature multi-tab code editor with live split-screen preview and version rollback.
+> 4. **Local cross-origin API relay & multi-user static cloud sync**:
+>    If the user's custom page code needs to fetch data from external third-party APIs (like stock quotes or other platforms), route those requests through their local bridge service to avoid browser CORS errors while keeping sensitive data strictly on their machine. Finally, support multi-user accounts where a user's local plugins can be synced to and from my server as pure static data so they can access their customizations on another computer—without my server ever executing user code."
+

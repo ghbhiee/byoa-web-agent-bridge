@@ -5,12 +5,19 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3045);
-const DATA_DIR = process.env.DATA_DIR || '/var/lib/codex-studio/pages';
-const USERS_DIR = process.env.USERS_DIR || '/var/lib/codex-studio/users';
+let DATA_DIR = process.env.DATA_DIR || '/var/lib/codex-studio/pages';
+let USERS_DIR = process.env.USERS_DIR || '/var/lib/codex-studio/users';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
-fs.mkdirSync(USERS_DIR, { recursive: true });
+try {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(USERS_DIR, { recursive: true });
+} catch (_) {
+  DATA_DIR = path.join(__dirname, 'data', 'pages');
+  USERS_DIR = path.join(__dirname, 'data', 'users');
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(USERS_DIR, { recursive: true });
+}
 
 // Connected SSE clients for instant hot-reload on the web page
 const sseClients = new Set();
