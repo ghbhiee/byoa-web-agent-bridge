@@ -7,13 +7,24 @@
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-38bdf8.svg)](https://nodejs.org/)
 [![Protocol](https://img.shields.io/badge/Protocol-MCP%20%2B%20Local%20Bridge-a78bfa.svg)](#architecture--system-design--系统架构设计)
 
-[**🇬🇧 English Documentation**](#english-documentation) | [**🇨🇳 中文完整文档**](#中文完整文档) | [**💬 Prompt to Build This on Your Site**](#prompt-to-build) | [**🖼️ Live Screenshots**](#screenshots)
+[**🇬🇧 English Documentation**](#english-documentation) | [**🇨🇳 中文完整文档**](#中文完整文档) | [**💬 Prompt to Build This on Your Site**](#prompt-to-build) | [**🎬 Story Animation & Screenshots**](#screenshots)
 
 ---
 
 <a id="screenshots"></a>
 
-## 🖼️ Live Interface Screenshots / 实际运行界面预览
+## 🎬 Interactive Scenario Showcase: Why BYOA? / 场景动态演示：为什么要用用户自己的本地 Agent？
+
+> **5-Act Schematic Animation**: Watch how a user stays inside their familiar **Broker A** website, invokes their own **Local Sovereign Agent** (`127.0.0.1:19820` paired via `#bridge_token`), aggregates accounts across **Bank B (`Skill`)** + **Broker C (`MCP`)** + **Local Tax Files** entirely on `localhost` (**0 bytes uploaded to Broker A's cloud**), and hot-injects a cross-institution wealth & tax-loss harvesting dashboard straight into Broker A's webpage.  
+> **五幕交互式原理演示**：展示为什么“每个网站自建云端 AI”会陷入低配模型与数据孤岛，以及 BYOA 如何把 **用户自己的本地主权 Agent** 放在核心位置——当用户在高频使用的 **券商 A 网站** 发起指令时，本地 Agent 自动通过 `MCP / Skills` 与 `bridge.fetchProxy` 跨平台拉取 **银行 B、券商 C 与本机报税表**，在 **100% 本地完成跨机构财务规划与税务抵扣计算（0 字节外流至券商 A 服务器）**，并毫秒级将定制看板注入回券商 A 页面。
+>
+> 👉 **[🎞️ Download HD MP4 Video (`docs/images/byoa-story-demo.mp4`)](docs/images/byoa-story-demo.mp4)** · **[🕹️ Open Interactive HTML Storyboard (`docs/byoa-interactive-story.html`)](docs/byoa-interactive-story.html)**
+
+![BYOA 5-Act Interactive Scenario Showcase](docs/images/byoa-story-demo.gif)
+
+---
+
+## 🖼️ Live Workbench Screenshots / 实际运行工作台截图
 
 ### 1. Local-First Plugin Workbench & Cross-Origin Real-Time Stock Terminal (`bridge.fetchProxy`)
 > Real-time stock quotes fetched via the Local Bridge CORS Proxy (`127.0.0.1:19820/proxy`), with the Large-Icon Plugin Sidebar on the left and the Local Headless Agent Chat on the right.  
@@ -32,12 +43,6 @@
 > 一键复制安装指令发给用户的本地 Agent 自动完成 MCP 与 Bridge 部署，并通过 URL `#bridge_token` 实现零网络泄露的安全配对。
 
 ![BYOA Local Agent Setup Modal](docs/images/03-agent-onboarding-modal.png)
-
-### 4. Collapsible Large-Icon Navigation Dock & Full-Canvas Local Plugin (`Snake`)
-> Left sidebar collapsed into a `50px × 50px` Large-Icon Dock and right chat panel collapsed into a floating pill, giving 100% viewport space to local plugins.  
-> 左侧导航折叠为大图标模式、右侧对话栏收起为悬浮胶囊，全屏运行本地注入的「贪食蛇」插件。
-
-![Collapsed Large Icon Dock & Snake Plugin](docs/images/04-collapsed-icon-dock-snake.png)
 
 ---
 
